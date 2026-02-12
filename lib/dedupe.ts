@@ -9,10 +9,20 @@ function makeKey(provider: string, trxId: string, amountPaisa: number): string {
 }
 
 export async function computeMessageHash(message: string): Promise<string> {
-  return await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    message
-  );
+  try {
+    return await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      message
+    );
+  } catch {
+    let hash = 0;
+    for (let i = 0; i < message.length; i++) {
+      const char = message.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16);
+  }
 }
 
 export async function isDuplicate(
@@ -20,17 +30,26 @@ export async function isDuplicate(
   trxId: string,
   amountPaisa: number
 ): Promise<boolean> {
-  const key = makeKey(provider, trxId, amountPaisa);
-  const stored = await AsyncStorage.getItem(key);
-  if (!stored) return false;
+  try {
+    const key = makeKey(provider, trxId, amountPaisa);
+    const stored = await AsyncStorage.getItem(key);
+    if (!stored) return false;
 
-  const expiry = parseInt(stored, 10);
-  if (Date.now() > expiry) {
-    await AsyncStorage.removeItem(key);
+    const expiry = parseInt(stored, 10);
+    if (isNaN(expiry)) {
+      await AsyncStorage.removeItem(key).catch(() => {});
+      return false;
+    }
+
+    if (Date.now() > expiry) {
+      await AsyncStorage.removeItem(key).catch(() => {});
+      return false;
+    }
+
+    return true;
+  } catch {
     return false;
   }
-
-  return true;
 }
 
 export async function markAsSent(
@@ -38,29 +57,39 @@ export async function markAsSent(
   trxId: string,
   amountPaisa: number
 ): Promise<void> {
-  const key = makeKey(provider, trxId, amountPaisa);
-  const expiry = (Date.now() + TTL_MS).toString();
-  await AsyncStorage.setItem(key, expiry);
+  try {
+    const key = makeKey(provider, trxId, amountPaisa);
+    const expiry = (Date.now() + TTL_MS).toString();
+    await AsyncStorage.setItem(key, expiry);
+  } catch (e) {
+    console.warn("[Paylite] Failed to mark as sent:", e);
+  }
 }
 
 export async function cleanExpiredEntries(): Promise<void> {
-  const keys = await AsyncStorage.getAllKeys();
-  const dedupeKeys = keys.filter((k) => k.startsWith(DEDUPE_PREFIX));
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const dedupeKeys = keys.filter((k) => k.startsWith(DEDUPE_PREFIX));
 
-  const now = Date.now();
-  const toRemove: string[] = [];
+    if (dedupeKeys.length === 0) return;
 
-  for (const key of dedupeKeys) {
-    const val = await AsyncStorage.getItem(key);
-    if (val) {
-      const expiry = parseInt(val, 10);
-      if (now > expiry) {
-        toRemove.push(key);
+    const now = Date.now();
+    const toRemove: string[] = [];
+
+    const pairs = await AsyncStorage.multiGet(dedupeKeys);
+    for (const [key, val] of pairs) {
+      if (val) {
+        const expiry = parseInt(val, 10);
+        if (isNaN(expiry) || now > expiry) {
+          toRemove.push(key);
+        }
       }
     }
-  }
 
-  if (toRemove.length > 0) {
-    await AsyncStorage.multiRemove(toRemove);
+    if (toRemove.length > 0) {
+      await AsyncStorage.multiRemove(toRemove);
+    }
+  } catch (e) {
+    console.warn("[Paylite] Failed to clean expired entries:", e);
   }
 }
