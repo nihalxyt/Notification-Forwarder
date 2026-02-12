@@ -3,7 +3,6 @@ import {
   Text,
   View,
   Pressable,
-  Switch,
   ScrollView,
   Linking,
   Platform,
@@ -11,7 +10,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import Colors from "@/constants/colors";
@@ -63,7 +62,7 @@ function SettingItem({
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { debugMode, toggleDebug, clearLogs, deviceKey, sentCount, failedCount, logs } = useApp();
+  const { clearLogs, deviceKey, logs, pendingCount } = useApp();
   const webTop = Platform.OS === "web" ? 67 : 0;
   const webBot = Platform.OS === "web" ? 34 : 0;
 
@@ -83,11 +82,6 @@ export default function SettingsScreen() {
     } else {
       Alert.alert("Battery Optimization", "Disable battery optimization for Paylite to ensure reliable background operation.");
     }
-  };
-
-  const handleToggleDebug = () => {
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-    toggleDebug();
   };
 
   const handleClearLogs = () => {
@@ -136,25 +130,8 @@ export default function SettingsScreen() {
           />
         </View>
 
-        <Text style={styles.groupLabel}>Configuration</Text>
+        <Text style={styles.groupLabel}>Data</Text>
         <View style={styles.card}>
-          <SettingItem
-            icon="terminal"
-            iconBg={C.blueDim}
-            iconColor={C.blue}
-            title="Debug Mode"
-            desc="Output detailed logs to the console"
-            delay={150}
-            right={
-              <Switch
-                value={debugMode}
-                onValueChange={handleToggleDebug}
-                trackColor={{ false: C.surfaceLight, true: C.accentDim }}
-                thumbColor={debugMode ? C.accent : C.textMuted}
-              />
-            }
-          />
-          <View style={styles.sep} />
           <SettingItem
             icon="trash-2"
             iconBg={C.redDim}
@@ -162,9 +139,23 @@ export default function SettingsScreen() {
             title="Clear Logs"
             desc={`Remove all ${logs.length} transaction records`}
             onPress={handleClearLogs}
-            delay={200}
+            delay={150}
           />
         </View>
+
+        {pendingCount > 0 ? (
+          <>
+            <Text style={styles.groupLabel}>Offline Queue</Text>
+            <Animated.View entering={FadeInDown.duration(250).delay(200)}>
+              <View style={styles.offlineCard}>
+                <Feather name="wifi-off" size={14} color={C.amber} />
+                <Text style={styles.offlineText}>
+                  {pendingCount} transaction{pendingCount > 1 ? "s" : ""} waiting to be sent
+                </Text>
+              </View>
+            </Animated.View>
+          </>
+        ) : null}
 
         <Text style={styles.groupLabel}>Setup Guide</Text>
         <Animated.View entering={FadeInDown.duration(250).delay(250)}>
@@ -205,7 +196,7 @@ export default function SettingsScreen() {
           </>
         ) : null}
 
-        <Text style={styles.footerText}>Paylite v1.0.0</Text>
+        <Text style={styles.footerText}>Powered by Nihal X</Text>
       </ScrollView>
     </View>
   );
@@ -288,6 +279,22 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: C.divider,
     marginLeft: 58,
+  },
+  offlineCard: {
+    backgroundColor: C.amberDim,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 176, 32, 0.15)",
+    padding: 14,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+  },
+  offlineText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: C.amber,
+    flex: 1,
   },
   guideCard: {
     backgroundColor: C.surfaceCard,

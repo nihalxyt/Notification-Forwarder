@@ -136,9 +136,9 @@ const keyExtractor = (item: TransactionLog) => item.id;
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const {
-    isLoggedIn, isListening, tokenExpiry, deviceKey, logs,
-    isLoading, loginError, sentCount, failedCount,
-    performLogin, logout, toggleListening,
+    isLoggedIn, tokenExpiry, deviceKey, logs,
+    isLoading, loginError, sentCount, failedCount, pendingCount,
+    performLogin, logout,
   } = useApp();
   const [inputKey, setInputKey] = useState(deviceKey);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -159,11 +159,6 @@ export default function HomeScreen() {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     logout();
   }, [logout]);
-
-  const handleToggle = useCallback(() => {
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-    toggleListening();
-  }, [toggleListening]);
 
   const isTokenValid = tokenExpiry ? Date.now() < tokenExpiry : false;
 
@@ -289,19 +284,10 @@ export default function HomeScreen() {
       </View>
 
       <Animated.View entering={FadeInDown.duration(300).delay(50)} style={styles.statusStrip}>
-        <Pressable
-          onPress={handleToggle}
-          style={({ pressed }) => [
-            styles.listenChip,
-            { backgroundColor: isListening ? C.accentDim : C.redDim, opacity: pressed ? 0.8 : 1 },
-          ]}
-          testID="listen-btn"
-        >
-          <View style={[styles.pulseDot, { backgroundColor: isListening ? C.green : C.red }]} />
-          <Text style={[styles.listenChipText, { color: isListening ? C.accent : C.red }]}>
-            {isListening ? "Active" : "Paused"}
-          </Text>
-        </Pressable>
+        <View style={[styles.listenChip, { backgroundColor: C.accentDim }]}>
+          <View style={[styles.pulseDot, { backgroundColor: C.green }]} />
+          <Text style={[styles.listenChipText, { color: C.accent }]}>Listening</Text>
+        </View>
 
         <View style={styles.tokenChip}>
           <Feather name="shield" size={12} color={isTokenValid ? C.green : C.red} />
@@ -309,6 +295,13 @@ export default function HomeScreen() {
             {isTokenValid ? "Secured" : "Expired"}
           </Text>
         </View>
+
+        {pendingCount > 0 ? (
+          <View style={[styles.tokenChip, { backgroundColor: C.amberDim, borderColor: "rgba(255,176,32,0.15)" }]}>
+            <Feather name="wifi-off" size={12} color={C.amber} />
+            <Text style={[styles.tokenChipText, { color: C.amber }]}>{pendingCount} queued</Text>
+          </View>
+        ) : null}
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(300).delay(120)} style={styles.statsRow}>

@@ -16,10 +16,11 @@ Paylite is an Android mobile app (React Native + Expo) that listens for payment 
 - `lib/dedupe.ts` - Transaction deduplication with TTL
 - `lib/api-client.ts` - Backend API client with auth, retry, user-friendly error messages
 - `lib/secure-storage.ts` - Secure credential storage (SecureStore on native, AsyncStorage on web)
-- `lib/notification-bridge.ts` - Bridge between native notification listener and app logic + native event listener
-- `lib/app-context.tsx` - Global app state provider
-- `app/index.tsx` - Main dashboard screen with KeyboardAvoidingView login
-- `app/settings.tsx` - Settings screen (permissions, debug toggle)
+- `lib/notification-bridge.ts` - Bridge between native notification listener and app logic + offline queue integration
+- `lib/offline-queue.ts` - Offline transaction queue with auto-retry on network reconnect (max 100 queued, 10 retries)
+- `lib/app-context.tsx` - Global app state provider (always-active listening when logged in)
+- `app/index.tsx` - Main dashboard screen with KeyboardAvoidingView login, always-active status
+- `app/settings.tsx` - Settings screen (permissions, offline queue count)
 - `plugins/withNotificationListener.js` - Expo config plugin that injects Kotlin services + AndroidManifest entries
 - `native-android-notification-listener/PaymentNotificationListenerService.kt` - NotificationListenerService
 - `native-android-notification-listener/PaymentSmsReceiver.kt` - SMS BroadcastReceiver
@@ -51,6 +52,10 @@ Paylite is an Android mobile app (React Native + Expo) that listens for payment 
 - EAS project ID: 1d729409-1789-460f-b43e-d2af4db3eb56
 
 ## Recent Changes
+- 2026-02-12: Removed debug mode UI and pause toggle (always active when logged in)
+- 2026-02-12: Changed footer to "Powered by Nihal X"
+- 2026-02-12: Implemented offline queue with auto-retry on network reconnect
+- 2026-02-12: Settings shows pending queue count if offline transactions exist
 - 2026-02-12: Fixed login error handling - shows friendly messages instead of raw JSON
 - 2026-02-12: Added KeyboardAvoidingView for login screen
 - 2026-02-12: Created Expo config plugin for native notification services
