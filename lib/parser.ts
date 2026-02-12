@@ -1,19 +1,25 @@
 import { ParsedTransaction, Provider } from "./types";
 
-const WHITELIST: Record<string, Provider> = {
+const SENDER_WHITELIST: Record<string, Provider> = {
   bkash: "bkash",
   nagad: "nagad",
   "16216": "rocket",
 };
 
-function normalizeWhitelistKey(sender: string): string {
-  return sender.trim().toLowerCase();
+const EXACT_SENDER_IDS = new Set([
+  "bkash",
+  "nagad",
+  "16216",
+]);
+
+function normalizeSender(sender: string): string {
+  return sender.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export function isWhitelistedSender(sender: string): boolean {
   try {
-    const key = normalizeWhitelistKey(sender);
-    return key in WHITELIST;
+    const key = normalizeSender(sender);
+    return EXACT_SENDER_IDS.has(key);
   } catch {
     return false;
   }
@@ -21,8 +27,8 @@ export function isWhitelistedSender(sender: string): boolean {
 
 export function getProvider(sender: string): Provider | null {
   try {
-    const key = normalizeWhitelistKey(sender);
-    return WHITELIST[key] ?? null;
+    const key = normalizeSender(sender);
+    return SENDER_WHITELIST[key] ?? null;
   } catch {
     return null;
   }
@@ -30,27 +36,23 @@ export function getProvider(sender: string): Provider | null {
 
 function extractBkash(message: string): { amount: number; trxId: string } | null {
   try {
-    const receivedPattern = /you have received/i;
-    if (!receivedPattern.test(message)) return null;
+    if (!/you have received/i.test(message)) return null;
 
-    const outgoingPatterns = /payment|sent|paid|cashout|cash out|withdraw/i;
-    if (outgoingPatterns.test(message.split("TrxID")[0] || "")) return null;
+    if (/recharge|cashout|cash out|withdraw|payment to|sent to|paid to|charge|merchant/i.test(message)) return null;
 
-    const amountMatch = message.match(/Tk\s*([\d,]+(?:\.\d{1,2})?)/i);
-    const trxIdMatch = message.match(/TrxID\s+([A-Za-z0-9]+)/i);
+    const amountMatch = message.match(/(?:You have received\s+)Tk\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (!amountMatch) return null;
 
-    if (!amountMatch || !trxIdMatch) return null;
+    const trxIdMatch = message.match(/TrxID\s+([A-Z0-9]{8,15})/i);
+    if (!trxIdMatch) return null;
 
     const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
     if (isNaN(amount) || amount <= 0 || amount > 99999999) return null;
 
-    const trxId = trxIdMatch[1].trim();
-    if (trxId.length < 4 || trxId.length > 30) return null;
+    const trxId = trxIdMatch[1].trim().toUpperCase();
+    if (trxId.length < 8 || trxId.length > 15) return null;
 
-    return {
-      amount,
-      trxId: trxId.toUpperCase(),
-    };
+    return { amount, trxId };
   } catch {
     return null;
   }
@@ -58,27 +60,23 @@ function extractBkash(message: string): { amount: number; trxId: string } | null
 
 function extractNagad(message: string): { amount: number; trxId: string } | null {
   try {
-    const receivedPattern = /money received/i;
-    if (!receivedPattern.test(message)) return null;
+    if (!/money received/i.test(message)) return null;
 
-    const outgoingPatterns = /payment to|sent|paid|debit/i;
-    if (outgoingPatterns.test(message)) return null;
+    if (/payment to|sent|paid|debit|request|cash out|withdraw/i.test(message)) return null;
 
     const amountMatch = message.match(/Amount:\s*Tk\s*([\d,]+(?:\.\d{1,2})?)/i);
-    const trxIdMatch = message.match(/TxnID:\s*([A-Za-z0-9]+)/i);
+    if (!amountMatch) return null;
 
-    if (!amountMatch || !trxIdMatch) return null;
+    const trxIdMatch = message.match(/TxnID:\s*([A-Z0-9]{6,15})/i);
+    if (!trxIdMatch) return null;
 
     const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
     if (isNaN(amount) || amount <= 0 || amount > 99999999) return null;
 
-    const trxId = trxIdMatch[1].trim();
-    if (trxId.length < 4 || trxId.length > 30) return null;
+    const trxId = trxIdMatch[1].trim().toUpperCase();
+    if (trxId.length < 6 || trxId.length > 15) return null;
 
-    return {
-      amount,
-      trxId: trxId.toUpperCase(),
-    };
+    return { amount, trxId };
   } catch {
     return null;
   }
@@ -86,27 +84,23 @@ function extractNagad(message: string): { amount: number; trxId: string } | null
 
 function extractRocket(message: string): { amount: number; trxId: string } | null {
   try {
-    const receivedPattern = /received/i;
-    if (!receivedPattern.test(message)) return null;
+    if (!/received/i.test(message)) return null;
 
-    const outgoingPatterns = /payment|sent|paid|transfer out|debit|cashout|withdraw/i;
-    if (outgoingPatterns.test(message)) return null;
+    if (/payment|sent|paid|transfer out|debit|cashout|withdraw|request/i.test(message)) return null;
 
-    const amountMatch = message.match(/Tk([\d,]+(?:\.\d{1,2})?)/i);
-    const trxIdMatch = message.match(/TxnId:([A-Za-z0-9]+)/i);
+    const amountMatch = message.match(/Tk([\d,]+(?:\.\d{1,2})?)\s*received/i);
+    if (!amountMatch) return null;
 
-    if (!amountMatch || !trxIdMatch) return null;
+    const trxIdMatch = message.match(/TxnId:(\d{8,15})/i);
+    if (!trxIdMatch) return null;
 
     const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
     if (isNaN(amount) || amount <= 0 || amount > 99999999) return null;
 
     const trxId = trxIdMatch[1].trim();
-    if (trxId.length < 4 || trxId.length > 30) return null;
+    if (trxId.length < 8 || trxId.length > 15) return null;
 
-    return {
-      amount,
-      trxId: trxId.toUpperCase(),
-    };
+    return { amount, trxId };
   } catch {
     return null;
   }
@@ -123,7 +117,7 @@ export function parseMessage(
     if (!provider) return null;
 
     const message = rawMessage.slice(0, 1000).trim();
-    if (message.length === 0) return null;
+    if (message.length < 20) return null;
 
     let result: { amount: number; trxId: string } | null = null;
 
