@@ -17,7 +17,7 @@ import {
   clearAuth,
 } from "./secure-storage";
 import { login } from "./api-client";
-import { setLogCallback, setDebugMode } from "./notification-bridge";
+import { setLogCallback, setDebugMode, startNativeListener } from "./notification-bridge";
 import { cleanExpiredEntries } from "./dedupe";
 
 const LOGS_KEY = "paylite_logs";
@@ -75,6 +75,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setLogCallback(addLog);
   }, [addLog]);
+
+  useEffect(() => {
+    if (isLoggedIn && isListening) {
+      startNativeListener();
+    }
+  }, [isLoggedIn, isListening]);
 
   useEffect(() => {
     (async () => {

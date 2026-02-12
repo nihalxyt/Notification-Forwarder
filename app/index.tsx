@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Keyboard,
   Dimensions,
+  KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
@@ -181,7 +183,11 @@ export default function HomeScreen() {
 
   if (!isLoggedIn) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + webTop, paddingBottom: insets.bottom + webBot }]}>
+      <KeyboardAvoidingView
+        style={[styles.container, { paddingTop: insets.top + webTop, paddingBottom: insets.bottom + webBot }]}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
         <StatusBar style="light" />
         <View style={styles.loginHeader}>
           <View style={{ width: 40 }} />
@@ -194,7 +200,12 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <Animated.View entering={FadeIn.duration(500)} style={styles.loginBody}>
+        <ScrollView
+          contentContainerStyle={styles.loginBody}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
           <View style={styles.loginHeroGlow}>
             <LinearGradient
               colors={["rgba(0,229,191,0.08)", "transparent"]}
@@ -229,8 +240,8 @@ export default function HomeScreen() {
           </View>
 
           {loginError ? (
-            <Animated.View entering={FadeIn.duration(200)} style={styles.errRow}>
-              <Ionicons name="alert-circle" size={14} color={C.red} />
+            <Animated.View entering={FadeIn.duration(200)} style={styles.errCard}>
+              <Ionicons name="alert-circle" size={16} color={C.red} />
               <Text style={styles.errText}>{loginError}</Text>
             </Animated.View>
           ) : null}
@@ -253,8 +264,8 @@ export default function HomeScreen() {
               </>
             )}
           </Pressable>
-        </Animated.View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -385,12 +396,12 @@ const styles = StyleSheet.create({
   },
 
   loginBody: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 28,
     justifyContent: "center" as const,
     alignItems: "center" as const,
     gap: 16,
-    marginTop: -50,
+    paddingBottom: 40,
   },
   loginHeroGlow: {
     width: 100,
@@ -435,15 +446,22 @@ const styles = StyleSheet.create({
     color: C.textPrimary,
     height: "100%" as const,
   },
-  errRow: {
+  errCard: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 6,
+    gap: 8,
+    backgroundColor: C.redDim,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: "100%" as const,
   },
   errText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
     color: C.red,
+    flex: 1,
+    lineHeight: 18,
   },
   loginBtn: {
     flexDirection: "row" as const,
