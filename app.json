@@ -46,7 +46,8 @@
       ],
       "expo-font",
       "expo-secure-store",
-      "./plugins/withNotificationListener"
+      "./plugins/withNotificationListener",
+      "./plugins/withProguard"
     ],
     "experiments": {
       "typedRoutes": true,
