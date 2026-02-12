@@ -1,23 +1,20 @@
 import { Platform } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { parseMessage } from "./parser";
 import { isDuplicate, markAsSent } from "./dedupe";
 import { sendTransaction } from "./api-client";
-import { TransactionLog } from "./types";
+import { TransactionLog, ParsedTransaction } from "./types";
+import { enqueue, flushQueue, setFlushCallback, startNetworkMonitor } from "./offline-queue";
 
 type LogCallback = (log: TransactionLog) => void;
 
 let logCallback: LogCallback | null = null;
-let debugMode = false;
 let processing = false;
 let nativeListenerActive = false;
 const queue: Array<{ sender: string; message: string }> = [];
 
 export function setLogCallback(cb: LogCallback): void {
   logCallback = cb;
-}
-
-export function setDebugMode(enabled: boolean): void {
-  debugMode = enabled;
 }
 
 function generateId(): string {
@@ -28,7 +25,15 @@ function addLog(log: TransactionLog): void {
   try {
     if (logCallback) logCallback(log);
   } catch {}
-  if (debugMode) console.log("[Paylite]", JSON.stringify(log));
+}
+
+async function isOnline(): Promise<boolean> {
+  try {
+    const state = await NetInfo.fetch();
+    return !!(state.isConnected && state.isInternetReachable !== false);
+  } catch {
+    return true;
+  }
 }
 
 async function processNotification(sender: string, message: string): Promise<void> {
@@ -50,6 +55,22 @@ async function processNotification(sender: string, message: string): Promise<voi
       return;
     }
 
+    const online = await isOnline();
+
+    if (!online) {
+      await enqueue(parsed);
+      addLog({
+        id: generateId(),
+        timestamp: Date.now(),
+        provider: parsed.provider,
+        trx_id: parsed.trx_id,
+        amount_paisa: parsed.amount_paisa,
+        status: "failed",
+        error: "Offline - queued for retry",
+      });
+      return;
+    }
+
     const result = await sendTransaction(parsed);
 
     if (result.success) {
@@ -63,15 +84,31 @@ async function processNotification(sender: string, message: string): Promise<voi
         status: "sent",
       });
     } else {
-      addLog({
-        id: generateId(),
-        timestamp: Date.now(),
-        provider: parsed.provider,
-        trx_id: parsed.trx_id,
-        amount_paisa: parsed.amount_paisa,
-        status: "failed",
-        error: result.error?.slice(0, 100),
-      });
+      const isNetErr = result.error?.toLowerCase().includes("network") ||
+                        result.error?.toLowerCase().includes("timeout") ||
+                        result.error?.toLowerCase().includes("connection");
+      if (isNetErr) {
+        await enqueue(parsed);
+        addLog({
+          id: generateId(),
+          timestamp: Date.now(),
+          provider: parsed.provider,
+          trx_id: parsed.trx_id,
+          amount_paisa: parsed.amount_paisa,
+          status: "failed",
+          error: "Network error - queued for retry",
+        });
+      } else {
+        addLog({
+          id: generateId(),
+          timestamp: Date.now(),
+          provider: parsed.provider,
+          trx_id: parsed.trx_id,
+          amount_paisa: parsed.amount_paisa,
+          status: "failed",
+          error: result.error?.slice(0, 100),
+        });
+      }
     }
   } catch (e: any) {
     console.error("[Paylite] Error:", e);
@@ -100,6 +137,27 @@ export async function handleIncomingNotification(
   processQueue();
 }
 
+export function initOfflineQueue(): void {
+  setFlushCallback(async (tx: ParsedTransaction) => {
+    const result = await sendTransaction(tx);
+    if (result.success) {
+      await markAsSent(tx.provider, tx.trx_id, tx.amount_paisa);
+      addLog({
+        id: generateId(),
+        timestamp: Date.now(),
+        provider: tx.provider,
+        trx_id: tx.trx_id,
+        amount_paisa: tx.amount_paisa,
+        status: "sent",
+      });
+    }
+    return result;
+  });
+
+  startNetworkMonitor();
+  flushQueue().catch(() => {});
+}
+
 export function startNativeListener(): void {
   if (Platform.OS !== "android" || nativeListenerActive) return;
 
@@ -119,10 +177,7 @@ export function startNativeListener(): void {
       } catch {}
     }
 
-    if (!PayliteBridge) {
-      if (debugMode) console.log("[Paylite] Native bridge not available (expected in Expo Go)");
-      return;
-    }
+    if (!PayliteBridge) return;
 
     const emitter = new NativeEventEmitter(PayliteBridge);
     emitter.addListener("onPaymentNotification", (event: any) => {
@@ -132,10 +187,7 @@ export function startNativeListener(): void {
     });
 
     nativeListenerActive = true;
-    if (debugMode) console.log("[Paylite] Native listener connected");
-  } catch (e: any) {
-    if (debugMode) console.log("[Paylite] Native listener not available:", e.message);
-  }
+  } catch {}
 }
 
 export function isNativeListenerActive(): boolean {
