@@ -17,19 +17,6 @@ function withProguard(config) {
       proguardProp.value = "true";
     }
 
-    const shrinkProp = props.find(
-      (p) => p.type === "property" && p.key === "android.enableShrinkResourcesInReleaseBuilds"
-    );
-    if (!shrinkProp) {
-      props.push({
-        type: "property",
-        key: "android.enableShrinkResourcesInReleaseBuilds",
-        value: "true",
-      });
-    } else {
-      shrinkProp.value = "true";
-    }
-
     return config;
   });
 }
