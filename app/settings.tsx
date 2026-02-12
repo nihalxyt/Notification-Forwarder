@@ -19,50 +19,43 @@ import { useApp } from "@/lib/app-context";
 
 const C = Colors.light;
 
-function SettingRow({
+function SettingItem({
   icon,
+  iconBg,
   iconColor,
   title,
-  subtitle,
+  desc,
   onPress,
-  rightElement,
+  right,
   delay,
 }: {
   icon: string;
+  iconBg: string;
   iconColor: string;
   title: string;
-  subtitle: string;
+  desc: string;
   onPress?: () => void;
-  rightElement?: React.ReactNode;
+  right?: React.ReactNode;
   delay: number;
 }) {
   return (
-    <Animated.View entering={FadeInDown.duration(300).delay(delay)}>
+    <Animated.View entering={FadeInDown.duration(250).delay(delay)}>
       <Pressable
         onPress={onPress}
         disabled={!onPress}
         style={({ pressed }) => [
-          styles.settingRow,
+          styles.settingItem,
           { opacity: onPress ? (pressed ? 0.7 : 1) : 1 },
         ]}
       >
-        <View
-          style={[
-            styles.settingIcon,
-            { backgroundColor: iconColor + "22" },
-          ]}
-        >
-          <Feather name={icon as any} size={18} color={iconColor} />
+        <View style={[styles.settingIconWrap, { backgroundColor: iconBg }]}>
+          <Feather name={icon as any} size={16} color={iconColor} />
         </View>
-        <View style={styles.settingContent}>
+        <View style={styles.settingBody}>
           <Text style={styles.settingTitle}>{title}</Text>
-          <Text style={styles.settingSubtitle}>{subtitle}</Text>
+          <Text style={styles.settingDesc}>{desc}</Text>
         </View>
-        {rightElement || (
-          onPress ? (
-            <Feather name="chevron-right" size={18} color={C.textMuted} />
-          ) : null
-        )}
+        {right || (onPress ? <Feather name="chevron-right" size={16} color={C.textMuted} /> : null)}
       </Pressable>
     </Animated.View>
   );
@@ -70,182 +63,149 @@ function SettingRow({
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { debugMode, toggleDebug, clearLogs, deviceKey } = useApp();
-  const webTopInset = Platform.OS === "web" ? 67 : 0;
-  const webBottomInset = Platform.OS === "web" ? 34 : 0;
+  const { debugMode, toggleDebug, clearLogs, deviceKey, sentCount, failedCount, logs } = useApp();
+  const webTop = Platform.OS === "web" ? 67 : 0;
+  const webBot = Platform.OS === "web" ? 34 : 0;
 
   const openNotificationAccess = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     if (Platform.OS === "android") {
       Linking.openSettings();
     } else {
-      Alert.alert(
-        "Notification Access",
-        "On Android, this opens your Notification Listener settings. This feature requires an Android device with the native listener module installed."
-      );
+      Alert.alert("Notification Access", "Open Notification Listener settings on your Android device to grant Paylite permission.");
     }
   };
 
-  const openBatteryOptimization = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const openBattery = () => {
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     if (Platform.OS === "android") {
       Linking.openSettings();
     } else {
-      Alert.alert(
-        "Battery Optimization",
-        "On Android, this opens your Battery Optimization settings to disable optimization for Paylite. This ensures the app runs reliably in the background."
-      );
+      Alert.alert("Battery Optimization", "Disable battery optimization for Paylite to ensure reliable background operation.");
     }
   };
 
   const handleToggleDebug = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     toggleDebug();
   };
 
   const handleClearLogs = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    clearLogs();
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
+    Alert.alert("Clear Logs", "Remove all transaction logs?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Clear", style: "destructive", onPress: clearLogs },
+    ]);
   };
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: insets.top + webTopInset,
-          paddingBottom: insets.bottom + webBottomInset,
-        },
-      ]}
-    >
+    <View style={[styles.container, { paddingTop: insets.top + webTop, paddingBottom: insets.bottom + webBot }]}>
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backBtn,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
+          style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
         >
-          <Ionicons name="close" size={24} color={C.textPrimary} />
+          <Ionicons name="close" size={22} color={C.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Settings</Text>
-        <View style={styles.backBtn} />
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.sectionTitle}>Android Permissions</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        <Text style={styles.groupLabel}>Permissions</Text>
         <View style={styles.card}>
-          <SettingRow
+          <SettingItem
             icon="bell"
-            iconColor={C.teal}
-            title="Notification Access"
-            subtitle="Required to listen for payment notifications from bKash, NAGAD, and Rocket."
+            iconBg={C.accentDim}
+            iconColor={C.accent}
+            title="Notification Listener"
+            desc="Required to capture bKash, NAGAD, and Rocket payments"
             onPress={openNotificationAccess}
-            delay={100}
+            delay={50}
           />
-          <View style={styles.divider} />
-          <SettingRow
+          <View style={styles.sep} />
+          <SettingItem
             icon="battery-charging"
+            iconBg={C.greenDim}
             iconColor={C.green}
             title="Battery Optimization"
-            subtitle="Disable battery optimization to keep Paylite running reliably in the background."
-            onPress={openBatteryOptimization}
+            desc="Disable to keep Paylite active in the background"
+            onPress={openBattery}
+            delay={100}
+          />
+        </View>
+
+        <Text style={styles.groupLabel}>Configuration</Text>
+        <View style={styles.card}>
+          <SettingItem
+            icon="terminal"
+            iconBg={C.blueDim}
+            iconColor={C.blue}
+            title="Debug Mode"
+            desc="Output detailed logs to the console"
+            delay={150}
+            right={
+              <Switch
+                value={debugMode}
+                onValueChange={handleToggleDebug}
+                trackColor={{ false: C.surfaceLight, true: C.accentDim }}
+                thumbColor={debugMode ? C.accent : C.textMuted}
+              />
+            }
+          />
+          <View style={styles.sep} />
+          <SettingItem
+            icon="trash-2"
+            iconBg={C.redDim}
+            iconColor={C.red}
+            title="Clear Logs"
+            desc={`Remove all ${logs.length} transaction records`}
+            onPress={handleClearLogs}
             delay={200}
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Auto-Start</Text>
-        <Animated.View entering={FadeInDown.duration(300).delay(300)}>
-          <View style={styles.card}>
-            <View style={styles.autoStartRow}>
-              <View
-                style={[
-                  styles.settingIcon,
-                  { backgroundColor: C.yellowMuted },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="rocket-launch-outline"
-                  size={18}
-                  color={C.yellow}
-                />
-              </View>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>Enable Auto-Start</Text>
-                <Text style={styles.settingSubtitle}>
-                  On some Android devices (Xiaomi, Huawei, Oppo, Vivo), you
-                  need to manually enable auto-start for Paylite in your
-                  device's security or app management settings. Go to Settings
-                  {">"} Apps {">"} Manage Apps {">"} Paylite {">"} Auto-start.
-                </Text>
-              </View>
+        <Text style={styles.groupLabel}>Setup Guide</Text>
+        <Animated.View entering={FadeInDown.duration(250).delay(250)}>
+          <View style={styles.guideCard}>
+            <View style={styles.guideStep}>
+              <View style={styles.guideNum}><Text style={styles.guideNumText}>1</Text></View>
+              <Text style={styles.guideText}>Grant Notification Listener access in Android Settings</Text>
+            </View>
+            <View style={styles.guideStep}>
+              <View style={styles.guideNum}><Text style={styles.guideNumText}>2</Text></View>
+              <Text style={styles.guideText}>Disable Battery Optimization for Paylite</Text>
+            </View>
+            <View style={styles.guideStep}>
+              <View style={styles.guideNum}><Text style={styles.guideNumText}>3</Text></View>
+              <Text style={styles.guideText}>Enable Auto-Start (Xiaomi, Huawei, Oppo, Vivo, Realme)</Text>
+            </View>
+            <View style={styles.guideStep}>
+              <View style={styles.guideNum}><Text style={styles.guideNumText}>4</Text></View>
+              <Text style={styles.guideText}>Lock app in Recent Apps to prevent system from killing it</Text>
             </View>
           </View>
         </Animated.View>
 
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <View style={styles.card}>
-          <SettingRow
-            icon="terminal"
-            iconColor="#A78BFA"
-            title="Debug Logs"
-            subtitle="Show detailed debug information in the console."
-            delay={400}
-            rightElement={
-              <Switch
-                value={debugMode}
-                onValueChange={handleToggleDebug}
-                trackColor={{ false: C.navyMid, true: C.tealMuted }}
-                thumbColor={debugMode ? C.teal : C.textMuted}
-              />
-            }
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            icon="trash-2"
-            iconColor={C.red}
-            title="Clear Transaction Logs"
-            subtitle="Remove all recorded transaction logs from the device."
-            onPress={handleClearLogs}
-            delay={500}
-          />
-        </View>
-
         {deviceKey ? (
           <>
-            <Text style={styles.sectionTitle}>Device</Text>
-            <Animated.View entering={FadeInDown.duration(300).delay(600)}>
-              <View style={styles.card}>
+            <Text style={styles.groupLabel}>Device</Text>
+            <Animated.View entering={FadeInDown.duration(250).delay(300)}>
+              <View style={styles.deviceCard}>
                 <View style={styles.deviceRow}>
-                  <Feather name="smartphone" size={16} color={C.textMuted} />
-                  <Text style={styles.deviceKeyLabel}>Device Key</Text>
+                  <Feather name="smartphone" size={14} color={C.textMuted} />
+                  <Text style={styles.deviceLabel}>Device Key</Text>
                 </View>
-                <Text style={styles.deviceKeyValue} numberOfLines={1}>
-                  {deviceKey.slice(0, 8)}{"***"}
-                  {deviceKey.slice(-4)}
+                <Text style={styles.deviceVal} numberOfLines={1}>
+                  {deviceKey.slice(0, 8)}{"***"}{deviceKey.slice(-4)}
                 </Text>
               </View>
             </Animated.View>
           </>
         ) : null}
 
-        <Animated.View entering={FadeInDown.duration(300).delay(700)}>
-          <View style={styles.infoCard}>
-            <Feather name="info" size={16} color={C.textMuted} />
-            <Text style={styles.infoText}>
-              Paylite requires a custom Android build with
-              NotificationListenerService to receive payment notifications in
-              the background. The test button on the home screen simulates
-              incoming notifications for development.
-            </Text>
-          </View>
-        </Animated.View>
-
-        <Text style={styles.versionText}>Paylite v1.0.0</Text>
+        <Text style={styles.footerText}>Paylite v1.0.0</Text>
       </ScrollView>
     </View>
   );
@@ -254,16 +214,16 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.navy,
+    backgroundColor: C.bg,
   },
   header: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  backBtn: {
+  closeBtn: {
     width: 40,
     height: 40,
     alignItems: "center" as const,
@@ -271,114 +231,126 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 17,
+    fontSize: 16,
     color: C.textPrimary,
-  },
-  scrollView: {
-    flex: 1,
+    letterSpacing: -0.2,
   },
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
-  sectionTitle: {
+  groupLabel: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 12,
+    fontSize: 11,
     color: C.textMuted,
     textTransform: "uppercase" as const,
     letterSpacing: 0.8,
-    marginTop: 24,
-    marginBottom: 10,
-    marginLeft: 4,
+    marginTop: 22,
+    marginBottom: 8,
+    marginLeft: 2,
   },
   card: {
-    backgroundColor: C.cardBg,
-    borderRadius: 16,
+    backgroundColor: C.surfaceCard,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: C.border,
     overflow: "hidden" as const,
   },
-  settingRow: {
+  settingItem: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    padding: 14,
-    gap: 12,
+    padding: 13,
+    gap: 11,
   },
-  settingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  settingIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     alignItems: "center" as const,
     justifyContent: "center" as const,
   },
-  settingContent: {
+  settingBody: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   settingTitle: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
+    fontSize: 14,
     color: C.textPrimary,
   },
-  settingSubtitle: {
+  settingDesc: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: C.textSecondary,
+    lineHeight: 15,
+  },
+  sep: {
+    height: 1,
+    backgroundColor: C.divider,
+    marginLeft: 58,
+  },
+  guideCard: {
+    backgroundColor: C.surfaceCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    gap: 12,
+  },
+  guideStep: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    gap: 10,
+  },
+  guideNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: C.accentDim,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  guideNumText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    color: C.accent,
+  },
+  guideText: {
+    flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     color: C.textSecondary,
     lineHeight: 17,
   },
-  divider: {
-    height: 1,
-    backgroundColor: C.border,
-    marginLeft: 62,
-  },
-  autoStartRow: {
-    flexDirection: "row" as const,
-    alignItems: "flex-start" as const,
+  deviceCard: {
+    backgroundColor: C.surfaceCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
     padding: 14,
-    gap: 12,
+    gap: 4,
   },
   deviceRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 4,
+    gap: 6,
   },
-  deviceKeyLabel: {
+  deviceLabel: {
     fontFamily: "Inter_500Medium",
-    fontSize: 12,
+    fontSize: 11,
     color: C.textMuted,
   },
-  deviceKeyValue: {
+  deviceVal: {
     fontFamily: "Inter_500Medium",
-    fontSize: 14,
+    fontSize: 13,
     color: C.textPrimary,
-    paddingHorizontal: 14,
-    paddingBottom: 14,
+    marginLeft: 20,
   },
-  infoCard: {
-    flexDirection: "row" as const,
-    gap: 10,
-    backgroundColor: C.cardBg,
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  infoText: {
+  footerText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: C.textSecondary,
-    lineHeight: 17,
-    flex: 1,
-  },
-  versionText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
+    fontSize: 11,
     color: C.textMuted,
     textAlign: "center" as const,
-    marginTop: 24,
+    marginTop: 28,
   },
 });

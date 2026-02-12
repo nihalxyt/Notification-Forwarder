@@ -1,5 +1,5 @@
 import { parseMessage } from "./parser";
-import { isDuplicate, markAsSent, computeMessageHash } from "./dedupe";
+import { isDuplicate, markAsSent } from "./dedupe";
 import { sendTransaction } from "./api-client";
 import { TransactionLog } from "./types";
 
@@ -24,33 +24,17 @@ function generateId(): string {
 
 function addLog(log: TransactionLog): void {
   try {
-    if (logCallback) {
-      logCallback(log);
-    }
-  } catch (e) {
-    console.warn("[Paylite] Log callback error:", e);
-  }
-  if (debugMode) {
-    console.log("[Paylite]", JSON.stringify(log));
-  }
+    if (logCallback) logCallback(log);
+  } catch {}
+  if (debugMode) console.log("[Paylite]", JSON.stringify(log));
 }
 
 async function processNotification(sender: string, message: string): Promise<void> {
   try {
     const parsed = parseMessage(sender, message);
-    if (!parsed) {
-      if (debugMode) {
-        console.log("[Paylite] Ignored - not a matching receive notification from:", sender);
-      }
-      return;
-    }
+    if (!parsed) return;
 
-    const duplicate = await isDuplicate(
-      parsed.provider,
-      parsed.trx_id,
-      parsed.amount_paisa
-    );
-
+    const duplicate = await isDuplicate(parsed.provider, parsed.trx_id, parsed.amount_paisa);
     if (duplicate) {
       addLog({
         id: generateId(),
@@ -63,8 +47,6 @@ async function processNotification(sender: string, message: string): Promise<voi
       });
       return;
     }
-
-    await computeMessageHash(parsed.message);
 
     const result = await sendTransaction(parsed);
 
@@ -90,29 +72,17 @@ async function processNotification(sender: string, message: string): Promise<voi
       });
     }
   } catch (e: any) {
-    console.error("[Paylite] Processing error:", e);
-    addLog({
-      id: generateId(),
-      timestamp: Date.now(),
-      provider: "bkash",
-      trx_id: "ERROR",
-      amount_paisa: 0,
-      status: "failed",
-      error: (e?.message || "Unknown error").slice(0, 100),
-    });
+    console.error("[Paylite] Error:", e);
   }
 }
 
 async function processQueue(): Promise<void> {
   if (processing) return;
   processing = true;
-
   try {
     while (queue.length > 0) {
       const item = queue.shift();
-      if (item) {
-        await processNotification(item.sender, item.message);
-      }
+      if (item) await processNotification(item.sender, item.message);
     }
   } finally {
     processing = false;
@@ -126,8 +96,4 @@ export async function handleIncomingNotification(
   if (!sender || !message) return;
   queue.push({ sender, message });
   processQueue();
-}
-
-export function simulateNotification(sender: string, message: string): void {
-  handleIncomingNotification(sender, message);
 }

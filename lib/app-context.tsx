@@ -17,15 +17,13 @@ import {
   clearAuth,
 } from "./secure-storage";
 import { login } from "./api-client";
-import {
-  setLogCallback,
-  setDebugMode,
-} from "./notification-bridge";
+import { setLogCallback, setDebugMode } from "./notification-bridge";
 import { cleanExpiredEntries } from "./dedupe";
 
 const LOGS_KEY = "paylite_logs";
 const DEBUG_KEY = "paylite_debug";
-const MAX_LOGS = 10;
+const LISTEN_KEY = "paylite_listen";
+const MAX_LOGS = 50;
 
 interface AppContextValue {
   isLoggedIn: boolean;
@@ -36,6 +34,8 @@ interface AppContextValue {
   debugMode: boolean;
   isLoading: boolean;
   loginError: string | null;
+  sentCount: number;
+  failedCount: number;
   performLogin: (key: string) => Promise<boolean>;
   logout: () => Promise<void>;
   toggleListening: () => void;
@@ -47,7 +47,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [isListening, setIsListening] = useState(true);
   const [tokenExpiry, setTokenExpiry] = useState<number | null>(null);
   const [deviceKey, setDeviceKey] = useState("");
   const [logs, setLogs] = useState<TransactionLog[]>([]);
@@ -55,10 +55,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
 
+  const sentCount = useMemo(
+    () => logs.filter((l) => l.status === "sent").length,
+    [logs]
+  );
+  const failedCount = useMemo(
+    () => logs.filter((l) => l.status === "failed").length,
+    [logs]
+  );
+
   const addLog = useCallback((log: TransactionLog) => {
     setLogs((prev) => {
       const updated = [log, ...prev].slice(0, MAX_LOGS);
-      AsyncStorage.setItem(LOGS_KEY, JSON.stringify(updated));
+      AsyncStorage.setItem(LOGS_KEY, JSON.stringify(updated)).catch(() => {});
       return updated;
     });
   }, []);
@@ -70,13 +79,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [storedKey, token, expiry, storedLogs, storedDebug] =
+        const [storedKey, token, expiry, storedLogs, storedDebug, storedListen] =
           await Promise.all([
             getDeviceKey(),
             getToken(),
             getTokenExpiry(),
             AsyncStorage.getItem(LOGS_KEY),
             AsyncStorage.getItem(DEBUG_KEY),
+            AsyncStorage.getItem(LISTEN_KEY),
           ]);
 
         if (storedKey) setDeviceKey(storedKey);
@@ -85,14 +95,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setTokenExpiry(expiry);
         }
         if (storedLogs) {
-          setLogs(JSON.parse(storedLogs));
+          try { setLogs(JSON.parse(storedLogs)); } catch {}
         }
         if (storedDebug === "true") {
           setDebugModeState(true);
           setDebugMode(true);
         }
-
-        cleanExpiredEntries();
+        if (storedListen !== null) {
+          setIsListening(storedListen !== "false");
+        }
+        cleanExpiredEntries().catch(() => {});
       } catch (e) {
         console.error("Init error:", e);
       } finally {
@@ -104,15 +116,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const performLogin = useCallback(async (key: string): Promise<boolean> => {
     setLoginError(null);
     setIsLoading(true);
-
     try {
       await saveDeviceKey(key);
       setDeviceKey(key);
-
       const result = await login(key);
       if (result.success) {
         setIsLoggedIn(true);
         setTokenExpiry(result.expiry);
+        setIsListening(true);
+        await AsyncStorage.setItem(LISTEN_KEY, "true").catch(() => {});
         setIsLoading(false);
         return true;
       } else {
@@ -132,24 +144,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsLoggedIn(false);
     setTokenExpiry(null);
     setIsListening(false);
+    await AsyncStorage.setItem(LISTEN_KEY, "false").catch(() => {});
   }, []);
 
   const toggleListening = useCallback(() => {
-    setIsListening((prev) => !prev);
+    setIsListening((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem(LISTEN_KEY, next.toString()).catch(() => {});
+      return next;
+    });
   }, []);
 
   const toggleDebug = useCallback(async () => {
     setDebugModeState((prev) => {
       const next = !prev;
       setDebugMode(next);
-      AsyncStorage.setItem(DEBUG_KEY, next.toString());
+      AsyncStorage.setItem(DEBUG_KEY, next.toString()).catch(() => {});
       return next;
     });
   }, []);
 
   const clearLogs = useCallback(async () => {
     setLogs([]);
-    await AsyncStorage.removeItem(LOGS_KEY);
+    await AsyncStorage.removeItem(LOGS_KEY).catch(() => {});
   }, []);
 
   const value = useMemo(
@@ -162,6 +179,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       debugMode,
       isLoading,
       loginError,
+      sentCount,
+      failedCount,
       performLogin,
       logout,
       toggleListening,
@@ -169,19 +188,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearLogs,
     }),
     [
-      isLoggedIn,
-      isListening,
-      tokenExpiry,
-      deviceKey,
-      logs,
-      debugMode,
-      isLoading,
-      loginError,
-      performLogin,
-      logout,
-      toggleListening,
-      toggleDebug,
-      clearLogs,
+      isLoggedIn, isListening, tokenExpiry, deviceKey, logs,
+      debugMode, isLoading, loginError, sentCount, failedCount,
+      performLogin, logout, toggleListening, toggleDebug, clearLogs,
     ]
   );
 
