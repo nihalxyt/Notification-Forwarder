@@ -1,0 +1,20 @@
+<!--
+  Add this service declaration inside the <application> tag of your
+  android/app/src/main/AndroidManifest.xml after running `npx expo prebuild`.
+-->
+
+<!-- Required permission -->
+<!-- <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" /> -->
+
+<!-- Service declaration inside <application> -->
+<!--
+<service
+    android:name=".PaymentNotificationListenerService"
+    android:label="Paylite Payment Listener"
+    android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+    android:exported="false">
+    <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+    </intent-filter>
+</service>
+-->
