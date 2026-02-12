@@ -21,7 +21,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             "com.dbbl.mbs.apps.main" to "16216",
         )
 
-        private val TITLE_MAP = mapOf(
+        private val EXACT_TITLE_MAP = mapOf(
             "bkash" to "bKash",
             "nagad" to "NAGAD",
             "16216" to "16216",
@@ -33,6 +33,12 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             "com.samsung.android.messaging",
             "com.oneplus.mms",
             "com.miui.mms",
+        )
+
+        private val MONEY_RECEIVED_PATTERNS = listOf(
+            Regex("you have received", RegexOption.IGNORE_CASE),
+            Regex("money received", RegexOption.IGNORE_CASE),
+            Regex("Tk[\\d,.]+\\s*received", RegexOption.IGNORE_CASE),
         )
     }
 
@@ -47,15 +53,19 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             val bigText = extras.getCharSequence("android.bigText")?.toString()?.trim() ?: ""
 
             val message = when {
-                bigText.isNotBlank() -> bigText
+                bigText.isNotBlank() && bigText.length > text.length -> bigText
                 text.isNotBlank() -> text
                 else -> return
             }
 
+            if (message.length < 20) return
+
             val sender = resolveSender(pkg, title) ?: return
 
-            Log.d(TAG, "Payment from $sender: ${message.take(80)}")
-            broadcastToApp(sender, message.take(1000))
+            if (!isMoneyReceived(message)) return
+
+            Log.d(TAG, "Payment from $sender: ${message.take(60)}...")
+            broadcastToApp(sender, message.take(500))
         } catch (e: Exception) {
             Log.e(TAG, "Error processing notification", e)
         }
@@ -66,14 +76,16 @@ class PaymentNotificationListenerService : NotificationListenerService() {
     private fun resolveSender(pkg: String, title: String): String? {
         APP_PACKAGES[pkg]?.let { return it }
 
-        val tLower = title.lowercase()
-        TITLE_MAP.entries.firstOrNull { tLower.contains(it.key) }?.let { return it.value }
-
         if (pkg in SMS_PACKAGES || pkg.contains("sms", ignoreCase = true) || pkg.contains("messaging", ignoreCase = true)) {
-            TITLE_MAP.entries.firstOrNull { title.equals(it.key, ignoreCase = true) || title == it.key }?.let { return it.value }
+            val titleCleaned = title.lowercase().trim().replace(Regex("[^a-z0-9]"), "")
+            EXACT_TITLE_MAP[titleCleaned]?.let { return it }
         }
 
         return null
+    }
+
+    private fun isMoneyReceived(body: String): Boolean {
+        return MONEY_RECEIVED_PATTERNS.any { it.containsMatchIn(body) }
     }
 
     private fun broadcastToApp(sender: String, message: String) {
