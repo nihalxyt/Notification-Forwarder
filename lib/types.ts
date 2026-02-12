@@ -22,12 +22,3 @@ export interface TransactionLog {
   status: "sent" | "ignored" | "failed";
   error?: string;
 }
-
-export interface AppState {
-  isLoggedIn: boolean;
-  isListening: boolean;
-  tokenExpiry: number | null;
-  deviceKey: string;
-  logs: TransactionLog[];
-  debugMode: boolean;
-}
