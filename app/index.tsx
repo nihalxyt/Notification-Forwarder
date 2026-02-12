@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, memo } from "react";
 import {
   StyleSheet,
   Text,
@@ -28,11 +28,15 @@ import { simulateNotification } from "@/lib/notification-bridge";
 const C = Colors.light;
 
 function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const h = d.getHours().toString().padStart(2, "0");
-  const m = d.getMinutes().toString().padStart(2, "0");
-  const s = d.getSeconds().toString().padStart(2, "0");
-  return `${h}:${m}:${s}`;
+  try {
+    const d = new Date(ts);
+    const h = d.getHours().toString().padStart(2, "0");
+    const m = d.getMinutes().toString().padStart(2, "0");
+    const s = d.getSeconds().toString().padStart(2, "0");
+    return `${h}:${m}:${s}`;
+  } catch {
+    return "--:--:--";
+  }
 }
 
 function formatAmount(paisa: number): string {
@@ -87,9 +91,9 @@ function statusBg(s: string): string {
   }
 }
 
-function LogItem({ item }: { item: TransactionLog }) {
+const LogItem = memo(function LogItem({ item }: { item: TransactionLog }) {
   return (
-    <Animated.View entering={FadeInDown.duration(300)} style={styles.logItem}>
+    <View style={styles.logItem}>
       <View style={styles.logRow}>
         <View
           style={[
@@ -130,15 +134,21 @@ function LogItem({ item }: { item: TransactionLog }) {
             {item.status.toUpperCase()}
           </Text>
         </View>
-        {item.error && (
+        {item.error ? (
           <Text style={styles.logError} numberOfLines={1}>
             {item.error}
           </Text>
-        )}
+        ) : null}
       </View>
-    </Animated.View>
+    </View>
   );
-}
+});
+
+const renderLogItem = ({ item }: { item: TransactionLog }) => (
+  <LogItem item={item} />
+);
+
+const keyExtractor = (item: TransactionLog) => item.id;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -161,27 +171,27 @@ export default function HomeScreen() {
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     if (!inputKey.trim()) return;
     Keyboard.dismiss();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
     setLoggingIn(true);
     await performLogin(inputKey.trim());
     setLoggingIn(false);
-  };
+  }, [inputKey, performLogin]);
 
-  const handleLogout = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleLogout = useCallback(() => {
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     logout();
-  };
+  }, [logout]);
 
-  const handleToggleListening = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleToggleListening = useCallback(() => {
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     toggleListening();
-  };
+  }, [toggleListening]);
 
-  const handleTestNotification = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const handleTestNotification = useCallback(() => {
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     const testMessages = [
       {
         sender: "bKash",
@@ -207,7 +217,11 @@ export default function HomeScreen() {
     ];
     const msg = testMessages[Math.floor(Math.random() * testMessages.length)];
     simulateNotification(msg.sender, msg.message);
-  };
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    router.push("/settings");
+  }, []);
 
   const tokenExpiryText = tokenExpiry
     ? new Date(tokenExpiry).toLocaleString()
@@ -219,7 +233,10 @@ export default function HomeScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <StatusBar style="light" />
-        <ActivityIndicator size="large" color={C.teal} />
+        <View style={styles.loadingWrap}>
+          <MaterialCommunityIcons name="lightning-bolt" size={40} color={C.teal} />
+          <ActivityIndicator size="small" color={C.teal} style={{ marginTop: 16 }} />
+        </View>
       </View>
     );
   }
@@ -246,11 +263,12 @@ export default function HomeScreen() {
           <Text style={styles.headerTitle}>Paylite</Text>
         </View>
         <Pressable
-          onPress={() => router.push("/settings")}
+          onPress={handleOpenSettings}
           style={({ pressed }) => [
             styles.headerBtn,
             { opacity: pressed ? 0.6 : 1 },
           ]}
+          testID="settings-btn"
         >
           <Feather name="settings" size={22} color={C.textSecondary} />
         </Pressable>
@@ -293,15 +311,16 @@ export default function HomeScreen() {
               returnKeyType="go"
               onSubmitEditing={handleLogin}
               editable={!loggingIn}
+              testID="device-key-input"
             />
           </View>
 
-          {loginError && (
+          {loginError ? (
             <Animated.View entering={FadeInUp.duration(200)} style={styles.errorRow}>
               <Feather name="alert-circle" size={14} color={C.red} />
               <Text style={styles.errorText}>{loginError}</Text>
             </Animated.View>
-          )}
+          ) : null}
 
           <Pressable
             onPress={handleLogin}
@@ -312,6 +331,7 @@ export default function HomeScreen() {
                 opacity: loggingIn || !inputKey.trim() ? 0.5 : pressed ? 0.85 : 1,
               },
             ]}
+            testID="login-btn"
           >
             {loggingIn ? (
               <ActivityIndicator size="small" color={C.navy} />
@@ -377,6 +397,7 @@ export default function HomeScreen() {
                   opacity: pressed ? 0.8 : 1,
                 },
               ]}
+              testID="listen-btn"
             >
               <Ionicons
                 name={isListening ? "radio" : "radio-outline"}
@@ -399,6 +420,7 @@ export default function HomeScreen() {
                 styles.testBtn,
                 { opacity: pressed ? 0.7 : 1 },
               ]}
+              testID="test-btn"
             >
               <Feather name="zap" size={18} color={C.yellow} />
               <Text style={styles.testBtnText}>Test</Text>
@@ -410,6 +432,7 @@ export default function HomeScreen() {
                 styles.logoutBtn,
                 { opacity: pressed ? 0.7 : 1 },
               ]}
+              testID="logout-btn"
             >
               <Feather name="log-out" size={18} color={C.red} />
             </Pressable>
@@ -430,11 +453,14 @@ export default function HomeScreen() {
             ) : (
               <FlatList
                 data={logs}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => <LogItem item={item} />}
+                keyExtractor={keyExtractor}
+                renderItem={renderLogItem}
                 scrollEnabled={logs.length > 0}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.logsList}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                windowSize={5}
               />
             )}
           </Animated.View>
@@ -448,6 +474,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.navy,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
   header: {
     flexDirection: "row" as const,

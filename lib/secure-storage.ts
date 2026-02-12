@@ -7,26 +7,50 @@ const ACCESS_TOKEN = "paylite_access_token";
 const TOKEN_EXPIRY = "paylite_token_expiry";
 
 async function setItem(key: string, value: string): Promise<void> {
-  if (Platform.OS === "web") {
-    await AsyncStorage.setItem(key, value);
-  } else {
-    await SecureStore.setItemAsync(key, value);
+  try {
+    if (Platform.OS === "web") {
+      await AsyncStorage.setItem(key, value);
+    } else {
+      await SecureStore.setItemAsync(key, value);
+    }
+  } catch (e) {
+    console.warn("[Paylite] SecureStore set failed, falling back:", e);
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (e2) {
+      console.error("[Paylite] AsyncStorage fallback also failed:", e2);
+    }
   }
 }
 
 async function getItem(key: string): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return await AsyncStorage.getItem(key);
-  } else {
-    return await SecureStore.getItemAsync(key);
+  try {
+    if (Platform.OS === "web") {
+      return await AsyncStorage.getItem(key);
+    } else {
+      return await SecureStore.getItemAsync(key);
+    }
+  } catch (e) {
+    console.warn("[Paylite] SecureStore get failed, falling back:", e);
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
   }
 }
 
 async function removeItem(key: string): Promise<void> {
-  if (Platform.OS === "web") {
-    await AsyncStorage.removeItem(key);
-  } else {
-    await SecureStore.deleteItemAsync(key);
+  try {
+    if (Platform.OS === "web") {
+      await AsyncStorage.removeItem(key);
+    } else {
+      await SecureStore.deleteItemAsync(key);
+    }
+  } catch {
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {}
   }
 }
 
@@ -49,7 +73,13 @@ export async function getToken(): Promise<string | null> {
 
   if (!token || !expiry) return null;
 
-  if (Date.now() > parseInt(expiry, 10)) {
+  const expiryNum = parseInt(expiry, 10);
+  if (isNaN(expiryNum)) {
+    await clearAuth();
+    return null;
+  }
+
+  if (Date.now() > expiryNum) {
     await clearAuth();
     return null;
   }
@@ -58,8 +88,14 @@ export async function getToken(): Promise<string | null> {
 }
 
 export async function getTokenExpiry(): Promise<number | null> {
-  const expiry = await getItem(TOKEN_EXPIRY);
-  return expiry ? parseInt(expiry, 10) : null;
+  try {
+    const expiry = await getItem(TOKEN_EXPIRY);
+    if (!expiry) return null;
+    const num = parseInt(expiry, 10);
+    return isNaN(num) ? null : num;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearAuth(): Promise<void> {
