@@ -14,8 +14,12 @@ function parseJwtExpiry(token: string): number {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return Date.now() + 3600000;
-    const payload = JSON.parse(atob(parts[1]));
-    if (payload.exp) return payload.exp * 1000;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    if (payload.exp && typeof payload.exp === "number") {
+      return payload.exp * 1000;
+    }
     return Date.now() + 3600000;
   } catch {
     return Date.now() + 3600000;
@@ -36,9 +40,29 @@ async function fetchWithTimeout(
       signal: controller.signal,
     });
     return response;
+  } catch (error: any) {
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out");
+    }
+    throw error;
   } finally {
     clearTimeout(id);
   }
+}
+
+function isNetworkError(error: any): boolean {
+  if (!error) return false;
+  const msg = (error.message || "").toLowerCase();
+  return (
+    msg.includes("network") ||
+    msg.includes("fetch") ||
+    msg.includes("timeout") ||
+    msg.includes("abort") ||
+    msg.includes("connection") ||
+    msg.includes("econnrefused") ||
+    msg.includes("enotfound") ||
+    msg.includes("dns")
+  );
 }
 
 export async function login(deviceKey: string): Promise<{
@@ -47,27 +71,46 @@ export async function login(deviceKey: string): Promise<{
   error?: string;
 }> {
   try {
+    if (!deviceKey || deviceKey.trim().length === 0) {
+      return { success: false, expiry: null, error: "Device key is empty" };
+    }
+
     const response = await fetchWithTimeout(`${BASE_URL}/api/v1/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_key: deviceKey }),
+      body: JSON.stringify({ device_key: deviceKey.trim() }),
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      return { success: false, expiry: null, error: `${response.status}: ${text}` };
+      let errorMsg = `Server error (${response.status})`;
+      try {
+        const text = await response.text();
+        if (text) errorMsg = text.slice(0, 200);
+      } catch {}
+      return { success: false, expiry: null, error: errorMsg };
     }
 
-    const data: AuthResponse = await response.json();
+    let data: AuthResponse;
+    try {
+      data = await response.json();
+    } catch {
+      return { success: false, expiry: null, error: "Invalid server response" };
+    }
+
+    if (!data.access_token) {
+      return { success: false, expiry: null, error: "No token received" };
+    }
+
     const expiry = parseJwtExpiry(data.access_token);
     await saveToken(data.access_token, expiry);
 
     return { success: true, expiry };
   } catch (error: any) {
+    const msg = error?.message || "Login failed";
     return {
       success: false,
       expiry: null,
-      error: error.message || "Login failed",
+      error: isNetworkError(error) ? "Network error. Check your connection." : msg,
     };
   }
 }
@@ -87,7 +130,7 @@ async function sendWithRetry(
       body: JSON.stringify({
         provider: transaction.provider,
         sender: transaction.sender,
-        message: transaction.message,
+        message: transaction.message.slice(0, 1000),
         amount_paisa: transaction.amount_paisa,
         trx_id: transaction.trx_id,
       }),
@@ -101,10 +144,23 @@ async function sendWithRetry(
       return { success: false, error: "UNAUTHORIZED" };
     }
 
-    const text = await response.text();
-    throw new Error(`${response.status}: ${text}`);
+    let text = `Server error (${response.status})`;
+    try {
+      const body = await response.text();
+      if (body) text = body.slice(0, 200);
+    } catch {}
+
+    if (attempt < RETRY_DELAYS.length - 1) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+      return sendWithRetry(transaction, token, attempt + 1);
+    }
+
+    return { success: false, error: text };
   } catch (error: any) {
-    if (error.message === "UNAUTHORIZED" || error === "UNAUTHORIZED") {
+    if (
+      error?.message === "UNAUTHORIZED" ||
+      error === "UNAUTHORIZED"
+    ) {
       return { success: false, error: "UNAUTHORIZED" };
     }
 
@@ -113,41 +169,51 @@ async function sendWithRetry(
       return sendWithRetry(transaction, token, attempt + 1);
     }
 
-    return { success: false, error: error.message || "Network error" };
+    return {
+      success: false,
+      error: isNetworkError(error) ? "Network error" : (error?.message || "Send failed"),
+    };
   }
 }
 
 export async function sendTransaction(
   transaction: ParsedTransaction
 ): Promise<{ success: boolean; error?: string }> {
-  let token = await getToken();
+  try {
+    let token = await getToken();
 
-  if (!token) {
-    const deviceKey = await getDeviceKey();
-    if (!deviceKey) return { success: false, error: "No device key" };
+    if (!token) {
+      const deviceKey = await getDeviceKey();
+      if (!deviceKey) return { success: false, error: "No device key saved" };
 
-    const loginResult = await login(deviceKey);
-    if (!loginResult.success) return { success: false, error: loginResult.error };
+      const loginResult = await login(deviceKey);
+      if (!loginResult.success) return { success: false, error: loginResult.error };
 
-    token = await getToken();
-    if (!token) return { success: false, error: "Login failed" };
+      token = await getToken();
+      if (!token) return { success: false, error: "Failed to get token after login" };
+    }
+
+    const result = await sendWithRetry(transaction, token);
+
+    if (result.error === "UNAUTHORIZED") {
+      await clearAuth();
+      const deviceKey = await getDeviceKey();
+      if (!deviceKey) return { success: false, error: "No device key for re-login" };
+
+      const loginResult = await login(deviceKey);
+      if (!loginResult.success) return { success: false, error: `Re-login failed: ${loginResult.error}` };
+
+      const newToken = await getToken();
+      if (!newToken) return { success: false, error: "No token after re-login" };
+
+      return sendWithRetry(transaction, newToken);
+    }
+
+    return result;
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error?.message || "Unexpected error sending transaction",
+    };
   }
-
-  const result = await sendWithRetry(transaction, token);
-
-  if (result.error === "UNAUTHORIZED") {
-    await clearAuth();
-    const deviceKey = await getDeviceKey();
-    if (!deviceKey) return { success: false, error: "No device key" };
-
-    const loginResult = await login(deviceKey);
-    if (!loginResult.success) return { success: false, error: loginResult.error };
-
-    const newToken = await getToken();
-    if (!newToken) return { success: false, error: "Re-login failed" };
-
-    return sendWithRetry(transaction, newToken);
-  }
-
-  return result;
 }
