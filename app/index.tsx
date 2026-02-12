@@ -9,7 +9,6 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
-  Dimensions,
   KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
@@ -25,7 +24,6 @@ import { useApp } from "@/lib/app-context";
 import { TransactionLog, Provider } from "@/lib/types";
 
 const C = Colors.light;
-const { width: SCREEN_W } = Dimensions.get("window");
 
 function formatTime(ts: number): string {
   try {
@@ -38,19 +36,8 @@ function formatTime(ts: number): string {
   }
 }
 
-function formatDate(ts: number): string {
-  try {
-    const d = new Date(ts);
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    return `${months[d.getMonth()]} ${d.getDate()}`;
-  } catch {
-    return "";
-  }
-}
-
 function formatAmount(paisa: number): string {
-  const tk = (paisa / 100).toFixed(2);
-  return `${tk}`;
+  return (paisa / 100).toFixed(2);
 }
 
 function providerColor(p: Provider): string {
@@ -132,6 +119,11 @@ const LogItem = memo(function LogItem({ item }: { item: TransactionLog }) {
 
 const renderLogItem = ({ item }: { item: TransactionLog }) => <LogItem item={item} />;
 const keyExtractor = (item: TransactionLog) => item.id;
+const getItemLayout = (_: any, index: number) => ({
+  length: 62,
+  offset: 62 * index + index * 6,
+  index,
+});
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -147,12 +139,16 @@ export default function HomeScreen() {
   const webBot = Platform.OS === "web" ? 34 : 0;
 
   const handleLogin = useCallback(async () => {
-    if (!inputKey.trim()) return;
+    const trimmed = inputKey.trim();
+    if (!trimmed) return;
     Keyboard.dismiss();
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
     setLoggingIn(true);
-    await performLogin(inputKey.trim());
-    setLoggingIn(false);
+    try {
+      await performLogin(trimmed);
+    } catch {} finally {
+      setLoggingIn(false);
+    }
   }, [inputKey, performLogin]);
 
   const handleLogout = useCallback(() => {
@@ -200,6 +196,7 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
+          overScrollMode="never"
         >
           <View style={styles.loginHeroGlow}>
             <LinearGradient
@@ -208,7 +205,7 @@ export default function HomeScreen() {
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
             />
-            <MaterialCommunityIcons name="shield-lock-outline" size={52} color={C.accent} />
+            <MaterialCommunityIcons name="shield-lock-outline" size={48} color={C.accent} />
           </View>
 
           <Text style={styles.loginH1}>Authenticate</Text>
@@ -230,6 +227,7 @@ export default function HomeScreen() {
               returnKeyType="go"
               onSubmitEditing={handleLogin}
               editable={!loggingIn}
+              selectionColor={C.accent}
               testID="device-key-input"
             />
           </View>
@@ -283,7 +281,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <Animated.View entering={FadeInDown.duration(300).delay(50)} style={styles.statusStrip}>
+      <Animated.View entering={FadeInDown.duration(280).delay(40)} style={styles.statusStrip}>
         <View style={[styles.listenChip, { backgroundColor: C.accentDim }]}>
           <View style={[styles.pulseDot, { backgroundColor: C.green }]} />
           <Text style={[styles.listenChipText, { color: C.accent }]}>Listening</Text>
@@ -304,7 +302,7 @@ export default function HomeScreen() {
         ) : null}
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.duration(300).delay(120)} style={styles.statsRow}>
+      <Animated.View entering={FadeInDown.duration(280).delay(100)} style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{logs.length}</Text>
           <Text style={styles.statLabel}>Total</Text>
@@ -319,24 +317,29 @@ export default function HomeScreen() {
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.duration(300).delay(180)} style={styles.logsSection}>
+      <Animated.View entering={FadeInDown.duration(280).delay(160)} style={styles.logsSection}>
         <Text style={styles.sectionLabel}>Activity</Text>
         {logs.length === 0 ? (
           <View style={styles.emptyWrap}>
-            <Feather name="inbox" size={32} color={C.textMuted} />
+            <Feather name="inbox" size={28} color={C.textMuted} />
             <Text style={styles.emptyText}>Waiting for payment notifications...</Text>
+            <Text style={styles.emptySubtext}>bKash, NAGAD, Rocket payments will appear here</Text>
           </View>
         ) : (
           <FlatList
             data={logs}
             keyExtractor={keyExtractor}
             renderItem={renderLogItem}
+            getItemLayout={getItemLayout}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.logsList}
             removeClippedSubviews={true}
-            maxToRenderPerBatch={8}
+            maxToRenderPerBatch={10}
+            initialNumToRender={8}
             windowSize={5}
             scrollEnabled={logs.length > 0}
+            overScrollMode="never"
+            bounces={false}
           />
         )}
       </Animated.View>
@@ -351,58 +354,58 @@ const styles = StyleSheet.create({
   },
   loadingWrap: {
     flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    alignItems: "center",
+    justifyContent: "center",
   },
   loadingGlow: {
     width: 72,
     height: 72,
     borderRadius: 36,
     backgroundColor: C.accentDim,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   loginHeader: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   logoRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   logoText: {
     fontFamily: "Inter_700Bold",
     fontSize: 18,
     color: C.textPrimary,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   iconBtn: {
     width: 40,
     height: 40,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   loginBody: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
+    justifyContent: "center",
+    alignItems: "center",
     gap: 16,
     paddingBottom: 40,
   },
   loginHeroGlow: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    overflow: "hidden" as const,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
     marginBottom: 8,
   },
   loginH1: {
@@ -415,18 +418,19 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     color: C.textSecondary,
-    textAlign: "center" as const,
-    lineHeight: 20,
-    paddingHorizontal: 16,
+    textAlign: "center",
+    lineHeight: 21,
+    paddingHorizontal: 12,
+    letterSpacing: 0.05,
   },
   inputWrap: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: C.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.border,
-    width: "100%" as const,
+    width: "100%",
     height: 50,
     paddingHorizontal: 16,
     gap: 12,
@@ -437,17 +441,18 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 14,
     color: C.textPrimary,
-    height: "100%" as const,
+    height: "100%",
+    letterSpacing: -0.1,
   },
   errCard: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     backgroundColor: C.redDim,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    width: "100%" as const,
+    width: "100%",
   },
   errText: {
     fontFamily: "Inter_500Medium",
@@ -455,16 +460,17 @@ const styles = StyleSheet.create({
     color: C.red,
     flex: 1,
     lineHeight: 18,
+    letterSpacing: -0.1,
   },
   loginBtn: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     backgroundColor: C.accent,
     borderRadius: 14,
     height: 50,
-    width: "100%" as const,
+    width: "100%",
     marginTop: 4,
   },
   loginBtnText: {
@@ -475,27 +481,28 @@ const styles = StyleSheet.create({
   },
 
   dashHeader: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   headerActions: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   statusStrip: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
     marginBottom: 14,
+    flexWrap: "wrap",
   },
   listenChip: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -512,8 +519,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   tokenChip: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -525,11 +532,11 @@ const styles = StyleSheet.create({
   tokenChipText: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
 
   statsRow: {
-    flexDirection: "row" as const,
+    flexDirection: "row",
     paddingHorizontal: 16,
     gap: 8,
     marginBottom: 18,
@@ -541,7 +548,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     paddingVertical: 14,
-    alignItems: "center" as const,
+    alignItems: "center",
   },
   statCardMid: {
     borderColor: C.borderLight,
@@ -557,7 +564,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: C.textMuted,
     marginTop: 2,
-    textTransform: "uppercase" as const,
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
 
@@ -569,22 +576,31 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
     color: C.textMuted,
-    textTransform: "uppercase" as const,
+    textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 10,
   },
   emptyWrap: {
     flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
     paddingBottom: 60,
   },
   emptyText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
     color: C.textMuted,
-    textAlign: "center" as const,
+    textAlign: "center",
+    letterSpacing: -0.1,
+  },
+  emptySubtext: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: C.textMuted,
+    textAlign: "center",
+    opacity: 0.6,
+    letterSpacing: 0.05,
   },
   logsList: {
     gap: 6,
@@ -592,8 +608,8 @@ const styles = StyleSheet.create({
   },
 
   logItem: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: C.surfaceCard,
     borderRadius: 12,
     borderWidth: 1,
@@ -605,22 +621,23 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
+    alignItems: "center",
+    justifyContent: "center",
   },
   logInfo: {
     flex: 1,
     gap: 4,
   },
   logTopRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   logProvider: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
+    fontSize: 13.5,
     color: C.textPrimary,
+    letterSpacing: -0.1,
   },
   logAmountTk: {
     fontFamily: "Inter_700Bold",
@@ -629,9 +646,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   logBottomRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   logTrxId: {
     fontFamily: "Inter_400Regular",
@@ -639,15 +656,16 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     flex: 1,
     marginRight: 8,
+    letterSpacing: 0.2,
   },
   logMetaRight: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   statusPill: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -667,5 +685,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 10,
     color: C.textMuted,
+    letterSpacing: 0.1,
   },
 });
