@@ -12,10 +12,22 @@ class PaymentSmsReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "PayliteSMS"
 
+        private val EXACT_SENDERS = setOf(
+            "bkash",
+            "nagad",
+            "16216",
+        )
+
         private val SENDER_MAP = mapOf(
             "bkash" to "bKash",
             "nagad" to "NAGAD",
             "16216" to "16216",
+        )
+
+        private val MONEY_RECEIVED_PATTERNS = listOf(
+            Regex("you have received", RegexOption.IGNORE_CASE),
+            Regex("money received", RegexOption.IGNORE_CASE),
+            Regex("Tk[\\d,.]+\\s*received", RegexOption.IGNORE_CASE),
         )
     }
 
@@ -36,15 +48,17 @@ class PaymentSmsReceiver : BroadcastReceiver() {
 
             for ((address, bodyBuilder) in grouped) {
                 val body = bodyBuilder.toString().trim()
-                if (body.isEmpty()) continue
+                if (body.isEmpty() || body.length < 20) continue
 
-                val sender = resolveSender(address) ?: continue
+                val sender = resolveStrictSender(address) ?: continue
 
-                Log.d(TAG, "SMS from $sender: ${body.take(80)}")
+                if (!isMoneyReceived(body)) continue
+
+                Log.d(TAG, "Payment SMS from $sender: ${body.take(60)}...")
 
                 val broadcast = Intent(PaymentNotificationListenerService.ACTION_PAYMENT).apply {
                     putExtra(PaymentNotificationListenerService.EXTRA_SENDER, sender)
-                    putExtra(PaymentNotificationListenerService.EXTRA_MESSAGE, body.take(1000))
+                    putExtra(PaymentNotificationListenerService.EXTRA_MESSAGE, body.take(500))
                 }
                 LocalBroadcastManager.getInstance(context).sendBroadcast(broadcast)
             }
@@ -53,12 +67,21 @@ class PaymentSmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun resolveSender(address: String): String? {
-        val addrLower = address.lowercase().trim()
-        for ((key, value) in SENDER_MAP) {
-            if (addrLower.contains(key)) return value
+    private fun resolveStrictSender(address: String): String? {
+        val cleaned = address.lowercase().trim().replace(Regex("[^a-z0-9]"), "")
+
+        if (cleaned in EXACT_SENDERS) {
+            return SENDER_MAP[cleaned]
         }
-        if (addrLower == "16216" || addrLower.endsWith("16216")) return "16216"
+
+        if (cleaned == "16216" || cleaned.endsWith("16216")) {
+            return "16216"
+        }
+
         return null
+    }
+
+    private fun isMoneyReceived(body: String): Boolean {
+        return MONEY_RECEIVED_PATTERNS.any { it.containsMatchIn(body) }
     }
 }
