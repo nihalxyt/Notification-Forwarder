@@ -104,11 +104,23 @@ export async function login(deviceKey: string): Promise<{
         } catch {}
       }
 
+      if (response.status === 401) {
+        return { success: false, expiry: null, error: "Invalid device key. Please check and try again." };
+      }
+      if (response.status === 422) {
+        const parsed422 = errorMsg;
+        if (parsed422.toLowerCase().includes("10 char") || parsed422.toLowerCase().includes("too_short")) {
+          return { success: false, expiry: null, error: "Device key must be at least 10 characters" };
+        }
+      }
+
       const friendlyMessages: Record<string, string> = {
         "String should have at least 10 characters": "Device key must be at least 10 characters",
+        "string_too_short": "Device key must be at least 10 characters",
         "Invalid device key": "Invalid device key. Please check and try again.",
         "Device not found": "Device not found. Contact your administrator.",
-        "Unauthorized": "Authentication failed. Check your device key.",
+        "Unauthorized": "Invalid device key. Please check and try again.",
+        "Not Found": "Device not registered. Contact your administrator.",
       };
 
       for (const [key, friendly] of Object.entries(friendlyMessages)) {
