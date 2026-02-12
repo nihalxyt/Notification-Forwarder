@@ -19,10 +19,13 @@
     },
     "android": {
       "package": "com.paylite.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0A1628",
         "foregroundImage": "./assets/images/icon.png"
-      }
+      },
+      "permissions": [],
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -36,11 +39,24 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-crypto"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
