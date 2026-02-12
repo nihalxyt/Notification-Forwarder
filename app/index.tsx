@@ -9,167 +9,140 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
+  Dimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeInUp,
-} from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import Colors from "@/constants/colors";
 import { useApp } from "@/lib/app-context";
 import { TransactionLog, Provider } from "@/lib/types";
-import { simulateNotification } from "@/lib/notification-bridge";
 
 const C = Colors.light;
+const { width: SCREEN_W } = Dimensions.get("window");
 
 function formatTime(ts: number): string {
   try {
     const d = new Date(ts);
     const h = d.getHours().toString().padStart(2, "0");
     const m = d.getMinutes().toString().padStart(2, "0");
-    const s = d.getSeconds().toString().padStart(2, "0");
-    return `${h}:${m}:${s}`;
+    return `${h}:${m}`;
   } catch {
-    return "--:--:--";
+    return "--:--";
+  }
+}
+
+function formatDate(ts: number): string {
+  try {
+    const d = new Date(ts);
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
+  } catch {
+    return "";
   }
 }
 
 function formatAmount(paisa: number): string {
-  return `${(paisa / 100).toFixed(2)} BDT`;
+  const tk = (paisa / 100).toFixed(2);
+  return `${tk}`;
 }
 
 function providerColor(p: Provider): string {
   switch (p) {
-    case "bkash":
-      return "#E2136E";
-    case "nagad":
-      return "#F6921E";
-    case "rocket":
-      return "#8C3494";
+    case "bkash": return C.bkash;
+    case "nagad": return C.nagad;
+    case "rocket": return C.rocket;
+  }
+}
+
+function providerIcon(p: Provider): string {
+  switch (p) {
+    case "bkash": return "cellphone";
+    case "nagad": return "cellphone-wireless";
+    case "rocket": return "rocket-launch-outline";
   }
 }
 
 function providerLabel(p: Provider): string {
   switch (p) {
-    case "bkash":
-      return "bKash";
-    case "nagad":
-      return "NAGAD";
-    case "rocket":
-      return "Rocket";
-  }
-}
-
-function statusColor(s: string): string {
-  switch (s) {
-    case "sent":
-      return C.green;
-    case "ignored":
-      return C.yellow;
-    case "failed":
-      return C.red;
-    default:
-      return C.textSecondary;
-  }
-}
-
-function statusBg(s: string): string {
-  switch (s) {
-    case "sent":
-      return C.greenMuted;
-    case "ignored":
-      return C.yellowMuted;
-    case "failed":
-      return C.redMuted;
-    default:
-      return "transparent";
+    case "bkash": return "bKash";
+    case "nagad": return "NAGAD";
+    case "rocket": return "Rocket";
   }
 }
 
 const LogItem = memo(function LogItem({ item }: { item: TransactionLog }) {
+  const color = providerColor(item.provider);
+  const isSent = item.status === "sent";
+  const isFailed = item.status === "failed";
+
   return (
     <View style={styles.logItem}>
-      <View style={styles.logRow}>
-        <View
-          style={[
-            styles.providerBadge,
-            { backgroundColor: providerColor(item.provider) + "22" },
-          ]}
-        >
-          <Text
-            style={[
-              styles.providerText,
-              { color: providerColor(item.provider) },
-            ]}
-          >
-            {providerLabel(item.provider)}
+      <View style={[styles.logIconWrap, { backgroundColor: color + "18" }]}>
+        <MaterialCommunityIcons
+          name={providerIcon(item.provider) as any}
+          size={18}
+          color={color}
+        />
+      </View>
+      <View style={styles.logInfo}>
+        <View style={styles.logTopRow}>
+          <Text style={styles.logProvider}>{providerLabel(item.provider)}</Text>
+          <Text style={[styles.logAmountTk, isSent && { color: C.green }]}>
+            {isFailed ? "-" : "+"}{formatAmount(item.amount_paisa)}
           </Text>
         </View>
-        <Text style={styles.logTime}>{formatTime(item.timestamp)}</Text>
-      </View>
-      <View style={styles.logRow}>
-        <Text style={styles.logTrx} numberOfLines={1}>
-          {item.trx_id}
-        </Text>
-        <Text style={styles.logAmount}>{formatAmount(item.amount_paisa)}</Text>
-      </View>
-      <View style={styles.logRow}>
-        <View
-          style={[styles.statusBadge, { backgroundColor: statusBg(item.status) }]}
-        >
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: statusColor(item.status) },
-            ]}
-          />
-          <Text
-            style={[styles.statusText, { color: statusColor(item.status) }]}
-          >
-            {item.status.toUpperCase()}
-          </Text>
+        <View style={styles.logBottomRow}>
+          <Text style={styles.logTrxId} numberOfLines={1}>{item.trx_id}</Text>
+          <View style={styles.logMetaRight}>
+            <View style={[
+              styles.statusPill,
+              {
+                backgroundColor: isSent ? C.greenDim : isFailed ? C.redDim : C.amberDim,
+              },
+            ]}>
+              <View style={[
+                styles.statusDotSm,
+                {
+                  backgroundColor: isSent ? C.green : isFailed ? C.red : C.amber,
+                },
+              ]} />
+              <Text style={[
+                styles.statusPillText,
+                {
+                  color: isSent ? C.green : isFailed ? C.red : C.amber,
+                },
+              ]}>
+                {item.status === "sent" ? "OK" : item.status === "failed" ? "ERR" : "DUP"}
+              </Text>
+            </View>
+            <Text style={styles.logTime}>{formatTime(item.timestamp)}</Text>
+          </View>
         </View>
-        {item.error ? (
-          <Text style={styles.logError} numberOfLines={1}>
-            {item.error}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
 });
 
-const renderLogItem = ({ item }: { item: TransactionLog }) => (
-  <LogItem item={item} />
-);
-
+const renderLogItem = ({ item }: { item: TransactionLog }) => <LogItem item={item} />;
 const keyExtractor = (item: TransactionLog) => item.id;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const {
-    isLoggedIn,
-    isListening,
-    tokenExpiry,
-    deviceKey,
-    logs,
-    isLoading,
-    loginError,
-    performLogin,
-    logout,
-    toggleListening,
+    isLoggedIn, isListening, tokenExpiry, deviceKey, logs,
+    isLoading, loginError, sentCount, failedCount,
+    performLogin, logout, toggleListening,
   } = useApp();
   const [inputKey, setInputKey] = useState(deviceKey);
   const [loggingIn, setLoggingIn] = useState(false);
   const inputRef = useRef<TextInput>(null);
-
-  const webTopInset = Platform.OS === "web" ? 67 : 0;
-  const webBottomInset = Platform.OS === "web" ? 34 : 0;
+  const webTop = Platform.OS === "web" ? 67 : 0;
+  const webBot = Platform.OS === "web" ? 34 : 0;
 
   const handleLogin = useCallback(async () => {
     if (!inputKey.trim()) return;
@@ -185,126 +158,66 @@ export default function HomeScreen() {
     logout();
   }, [logout]);
 
-  const handleToggleListening = useCallback(() => {
+  const handleToggle = useCallback(() => {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     toggleListening();
   }, [toggleListening]);
-
-  const handleTestNotification = useCallback(() => {
-    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
-    const testMessages = [
-      {
-        sender: "bKash",
-        message:
-          "You have received Tk 500.00 from 01712345678. Fee Tk 0.00. Balance Tk 1,200.00. TrxID TEST" +
-          Date.now().toString(36).toUpperCase() +
-          " at 12/02/2026 10:30",
-      },
-      {
-        sender: "NAGAD",
-        message:
-          "Money Received.\nAmount: Tk 300.00\nSender: 01812345678\nRef: N/A\nTxnID: TEST" +
-          Date.now().toString(36).toUpperCase() +
-          "\nBalance: Tk 800.00\n12/02/2026 10:30",
-      },
-      {
-        sender: "16216",
-        message:
-          "Tk150.00 received from A/C:***789 Fee:Tk0, Your A/C Balance: Tk500.00 TxnId:" +
-          Date.now().toString() +
-          " Date:12-FEB-26 10:30:00 am.",
-      },
-    ];
-    const msg = testMessages[Math.floor(Math.random() * testMessages.length)];
-    simulateNotification(msg.sender, msg.message);
-  }, []);
-
-  const handleOpenSettings = useCallback(() => {
-    router.push("/settings");
-  }, []);
-
-  const tokenExpiryText = tokenExpiry
-    ? new Date(tokenExpiry).toLocaleString()
-    : "N/A";
 
   const isTokenValid = tokenExpiry ? Date.now() < tokenExpiry : false;
 
   if (isLoading && !loggingIn) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <View style={[styles.container, { paddingTop: insets.top + webTop }]}>
         <StatusBar style="light" />
         <View style={styles.loadingWrap}>
-          <MaterialCommunityIcons name="lightning-bolt" size={40} color={C.teal} />
-          <ActivityIndicator size="small" color={C.teal} style={{ marginTop: 16 }} />
+          <View style={styles.loadingGlow}>
+            <MaterialCommunityIcons name="lightning-bolt" size={32} color={C.accent} />
+          </View>
+          <ActivityIndicator size="small" color={C.accent} style={{ marginTop: 20 }} />
         </View>
       </View>
     );
   }
 
-  return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: insets.top + webTopInset,
-          paddingBottom: insets.bottom + webBottomInset,
-        },
-      ]}
-    >
-      <StatusBar style="light" />
-
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <MaterialCommunityIcons
-            name="lightning-bolt"
-            size={28}
-            color={C.teal}
-          />
-          <Text style={styles.headerTitle}>Paylite</Text>
-        </View>
-        <Pressable
-          onPress={handleOpenSettings}
-          style={({ pressed }) => [
-            styles.headerBtn,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
-          testID="settings-btn"
-        >
-          <Feather name="settings" size={22} color={C.textSecondary} />
-        </Pressable>
-      </View>
-
-      {!isLoggedIn ? (
-        <Animated.View
-          entering={FadeIn.duration(400)}
-          style={styles.loginContainer}
-        >
-          <View style={styles.loginIconWrap}>
-            <MaterialCommunityIcons
-              name="shield-key-outline"
-              size={48}
-              color={C.teal}
-            />
+  if (!isLoggedIn) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + webTop, paddingBottom: insets.bottom + webBot }]}>
+        <StatusBar style="light" />
+        <View style={styles.loginHeader}>
+          <View style={{ width: 40 }} />
+          <View style={styles.logoRow}>
+            <MaterialCommunityIcons name="lightning-bolt" size={22} color={C.accent} />
+            <Text style={styles.logoText}>Paylite</Text>
           </View>
-          <Text style={styles.loginTitle}>Connect Your Device</Text>
-          <Text style={styles.loginSubtitle}>
-            Enter your device key to authenticate and start listening for
-            payment notifications.
+          <Pressable onPress={() => router.push("/settings")} style={styles.iconBtn} testID="settings-btn">
+            <Feather name="settings" size={20} color={C.textMuted} />
+          </Pressable>
+        </View>
+
+        <Animated.View entering={FadeIn.duration(500)} style={styles.loginBody}>
+          <View style={styles.loginHeroGlow}>
+            <LinearGradient
+              colors={["rgba(0,229,191,0.08)", "transparent"]}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+            />
+            <MaterialCommunityIcons name="shield-lock-outline" size={52} color={C.accent} />
+          </View>
+
+          <Text style={styles.loginH1}>Authenticate</Text>
+          <Text style={styles.loginSub}>
+            Enter your device key to start capturing payment notifications automatically.
           </Text>
 
-          <View style={styles.inputContainer}>
-            <Feather
-              name="key"
-              size={18}
-              color={C.textMuted}
-              style={styles.inputIcon}
-            />
+          <View style={styles.inputWrap}>
+            <Feather name="key" size={16} color={C.textMuted} />
             <TextInput
               ref={inputRef}
               style={styles.input}
               value={inputKey}
               onChangeText={setInputKey}
-              placeholder="Device Key"
+              placeholder="Enter device key"
               placeholderTextColor={C.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -316,9 +229,9 @@ export default function HomeScreen() {
           </View>
 
           {loginError ? (
-            <Animated.View entering={FadeInUp.duration(200)} style={styles.errorRow}>
-              <Feather name="alert-circle" size={14} color={C.red} />
-              <Text style={styles.errorText}>{loginError}</Text>
+            <Animated.View entering={FadeIn.duration(200)} style={styles.errRow}>
+              <Ionicons name="alert-circle" size={14} color={C.red} />
+              <Text style={styles.errText}>{loginError}</Text>
             </Animated.View>
           ) : null}
 
@@ -327,145 +240,102 @@ export default function HomeScreen() {
             disabled={loggingIn || !inputKey.trim()}
             style={({ pressed }) => [
               styles.loginBtn,
-              {
-                opacity: loggingIn || !inputKey.trim() ? 0.5 : pressed ? 0.85 : 1,
-              },
+              { opacity: loggingIn || !inputKey.trim() ? 0.4 : pressed ? 0.85 : 1 },
             ]}
             testID="login-btn"
           >
             {loggingIn ? (
-              <ActivityIndicator size="small" color={C.navy} />
+              <ActivityIndicator size="small" color={C.bg} />
             ) : (
               <>
-                <Ionicons name="log-in-outline" size={20} color={C.navy} />
-                <Text style={styles.loginBtnText}>Login & Start</Text>
+                <Ionicons name="arrow-forward" size={18} color={C.bg} />
+                <Text style={styles.loginBtnText}>Connect</Text>
               </>
             )}
           </Pressable>
         </Animated.View>
-      ) : (
-        <View style={styles.dashContainer}>
-          <Animated.View
-            entering={FadeInDown.duration(300).delay(100)}
-            style={styles.statusCard}
-          >
-            <View style={styles.statusRow}>
-              <View style={styles.statusItem}>
-                <View style={styles.statusLabelRow}>
-                  <View
-                    style={[
-                      styles.statusDotLg,
-                      {
-                        backgroundColor: isTokenValid ? C.green : C.red,
-                      },
-                    ]}
-                  />
-                  <Text style={styles.statusLabel}>Status</Text>
-                </View>
-                <Text
-                  style={[
-                    styles.statusValue,
-                    { color: isTokenValid ? C.green : C.red },
-                  ]}
-                >
-                  {isTokenValid ? "Authenticated" : "Token Expired"}
-                </Text>
-              </View>
-              <View style={styles.statusDivider} />
-              <View style={styles.statusItem}>
-                <View style={styles.statusLabelRow}>
-                  <Feather name="clock" size={12} color={C.textMuted} />
-                  <Text style={styles.statusLabel}>Expiry</Text>
-                </View>
-                <Text style={styles.statusValue} numberOfLines={1}>
-                  {tokenExpiryText}
-                </Text>
-              </View>
-            </View>
-          </Animated.View>
+      </View>
+    );
+  }
 
-          <Animated.View
-            entering={FadeInDown.duration(300).delay(200)}
-            style={styles.controlRow}
-          >
-            <Pressable
-              onPress={handleToggleListening}
-              style={({ pressed }) => [
-                styles.listenBtn,
-                {
-                  backgroundColor: isListening ? C.tealMuted : C.redMuted,
-                  opacity: pressed ? 0.8 : 1,
-                },
-              ]}
-              testID="listen-btn"
-            >
-              <Ionicons
-                name={isListening ? "radio" : "radio-outline"}
-                size={22}
-                color={isListening ? C.teal : C.red}
-              />
-              <Text
-                style={[
-                  styles.listenBtnText,
-                  { color: isListening ? C.teal : C.red },
-                ]}
-              >
-                {isListening ? "Listening" : "Paused"}
-              </Text>
-            </Pressable>
+  return (
+    <View style={[styles.container, { paddingTop: insets.top + webTop, paddingBottom: insets.bottom + webBot }]}>
+      <StatusBar style="light" />
 
-            <Pressable
-              onPress={handleTestNotification}
-              style={({ pressed }) => [
-                styles.testBtn,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
-              testID="test-btn"
-            >
-              <Feather name="zap" size={18} color={C.yellow} />
-              <Text style={styles.testBtnText}>Test</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={handleLogout}
-              style={({ pressed }) => [
-                styles.logoutBtn,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
-              testID="logout-btn"
-            >
-              <Feather name="log-out" size={18} color={C.red} />
-            </Pressable>
-          </Animated.View>
-
-          <Animated.View
-            entering={FadeInDown.duration(300).delay(300)}
-            style={styles.logsSection}
-          >
-            <Text style={styles.logsTitle}>Recent Transactions</Text>
-            {logs.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Feather name="inbox" size={36} color={C.textMuted} />
-                <Text style={styles.emptyText}>
-                  No transactions yet. Payment notifications will appear here.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={logs}
-                keyExtractor={keyExtractor}
-                renderItem={renderLogItem}
-                scrollEnabled={logs.length > 0}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.logsList}
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-              />
-            )}
-          </Animated.View>
+      <View style={styles.dashHeader}>
+        <View style={styles.logoRow}>
+          <MaterialCommunityIcons name="lightning-bolt" size={22} color={C.accent} />
+          <Text style={styles.logoText}>Paylite</Text>
         </View>
-      )}
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => router.push("/settings")} style={styles.iconBtn} testID="settings-btn">
+            <Feather name="settings" size={20} color={C.textSecondary} />
+          </Pressable>
+          <Pressable onPress={handleLogout} style={styles.iconBtn} testID="logout-btn">
+            <Feather name="log-out" size={18} color={C.red} />
+          </Pressable>
+        </View>
+      </View>
+
+      <Animated.View entering={FadeInDown.duration(300).delay(50)} style={styles.statusStrip}>
+        <Pressable
+          onPress={handleToggle}
+          style={({ pressed }) => [
+            styles.listenChip,
+            { backgroundColor: isListening ? C.accentDim : C.redDim, opacity: pressed ? 0.8 : 1 },
+          ]}
+          testID="listen-btn"
+        >
+          <View style={[styles.pulseDot, { backgroundColor: isListening ? C.green : C.red }]} />
+          <Text style={[styles.listenChipText, { color: isListening ? C.accent : C.red }]}>
+            {isListening ? "Active" : "Paused"}
+          </Text>
+        </Pressable>
+
+        <View style={styles.tokenChip}>
+          <Feather name="shield" size={12} color={isTokenValid ? C.green : C.red} />
+          <Text style={[styles.tokenChipText, { color: isTokenValid ? C.green : C.red }]}>
+            {isTokenValid ? "Secured" : "Expired"}
+          </Text>
+        </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.duration(300).delay(120)} style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>{logs.length}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+        <View style={[styles.statCard, styles.statCardMid]}>
+          <Text style={[styles.statNum, { color: C.green }]}>{sentCount}</Text>
+          <Text style={styles.statLabel}>Sent</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statNum, { color: C.red }]}>{failedCount}</Text>
+          <Text style={styles.statLabel}>Failed</Text>
+        </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.duration(300).delay(180)} style={styles.logsSection}>
+        <Text style={styles.sectionLabel}>Activity</Text>
+        {logs.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Feather name="inbox" size={32} color={C.textMuted} />
+            <Text style={styles.emptyText}>Waiting for payment notifications...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={logs}
+            keyExtractor={keyExtractor}
+            renderItem={renderLogItem}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.logsList}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            scrollEnabled={logs.length > 0}
+          />
+        )}
+      </Animated.View>
     </View>
   );
 }
@@ -473,97 +343,106 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.navy,
+    backgroundColor: C.bg,
   },
   loadingWrap: {
     flex: 1,
     alignItems: "center" as const,
     justifyContent: "center" as const,
   },
-  header: {
+  loadingGlow: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: C.accentDim,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+
+  loginHeader: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  headerLeft: {
+  logoRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
+    gap: 6,
   },
-  headerTitle: {
+  logoText: {
     fontFamily: "Inter_700Bold",
-    fontSize: 22,
+    fontSize: 18,
     color: C.textPrimary,
+    letterSpacing: -0.3,
   },
-  headerBtn: {
+  iconBtn: {
     width: 40,
     height: 40,
     alignItems: "center" as const,
     justifyContent: "center" as const,
   },
-  loginContainer: {
+
+  loginBody: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     justifyContent: "center" as const,
     alignItems: "center" as const,
     gap: 16,
-    marginTop: -60,
+    marginTop: -50,
   },
-  loginIconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: C.tealMuted,
+  loginHeroGlow: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     alignItems: "center" as const,
     justifyContent: "center" as const,
+    overflow: "hidden" as const,
     marginBottom: 8,
   },
-  loginTitle: {
+  loginH1: {
     fontFamily: "Inter_700Bold",
-    fontSize: 24,
+    fontSize: 26,
     color: C.textPrimary,
-    textAlign: "center" as const,
+    letterSpacing: -0.5,
   },
-  loginSubtitle: {
+  loginSub: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     color: C.textSecondary,
     textAlign: "center" as const,
     lineHeight: 20,
-    paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingHorizontal: 16,
   },
-  inputContainer: {
+  inputWrap: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    backgroundColor: C.navyLight,
+    backgroundColor: C.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.border,
     width: "100%" as const,
-    height: 52,
+    height: 50,
     paddingHorizontal: 16,
-  },
-  inputIcon: {
-    marginRight: 12,
+    gap: 12,
+    marginTop: 4,
   },
   input: {
     flex: 1,
     fontFamily: "Inter_500Medium",
-    fontSize: 15,
+    fontSize: 14,
     color: C.textPrimary,
     height: "100%" as const,
   },
-  errorRow: {
+  errRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 6,
   },
-  errorText: {
+  errText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    fontSize: 12,
     color: C.red,
   },
   loginBtn: {
@@ -571,201 +450,211 @@ const styles = StyleSheet.create({
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: 8,
-    backgroundColor: C.teal,
+    backgroundColor: C.accent,
     borderRadius: 14,
-    height: 52,
+    height: 50,
     width: "100%" as const,
     marginTop: 4,
   },
   loginBtnText: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 16,
-    color: C.navy,
+    fontSize: 15,
+    color: C.bg,
+    letterSpacing: -0.2,
   },
-  dashContainer: {
-    flex: 1,
+
+  dashHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
     paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  statusCard: {
-    backgroundColor: C.cardBg,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 16,
-    marginBottom: 12,
-  },
-  statusRow: {
+  headerActions: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
   },
-  statusItem: {
-    flex: 1,
-    gap: 6,
+
+  statusStrip: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 14,
   },
-  statusLabelRow: {
+  listenChip: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
-  statusDotLg: {
-    width: 8,
-    height: 8,
+  pulseDot: {
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
-  statusLabel: {
-    fontFamily: "Inter_500Medium",
+  listenChipText: {
+    fontFamily: "Inter_600SemiBold",
     fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  tokenChip: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: C.surfaceCard,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  tokenChipText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    letterSpacing: 0.2,
+  },
+
+  statsRow: {
+    flexDirection: "row" as const,
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 18,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: C.surfaceCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 14,
+    alignItems: "center" as const,
+  },
+  statCardMid: {
+    borderColor: C.borderLight,
+  },
+  statNum: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    color: C.textPrimary,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
     color: C.textMuted,
+    marginTop: 2,
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
-  statusValue: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
-    color: C.textPrimary,
-  },
-  statusDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: C.border,
-    marginHorizontal: 12,
-  },
-  controlRow: {
-    flexDirection: "row" as const,
-    gap: 10,
-    marginBottom: 16,
-  },
-  listenBtn: {
-    flex: 1,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    gap: 8,
-    height: 48,
-    borderRadius: 14,
-  },
-  listenBtnText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
-  },
-  testBtn: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    gap: 6,
-    height: 48,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: C.yellowMuted,
-  },
-  testBtnText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
-    color: C.yellow,
-  },
-  logoutBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: C.redMuted,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
+
   logsSection: {
     flex: 1,
+    paddingHorizontal: 16,
   },
-  logsTitle: {
+  sectionLabel: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
-    color: C.textSecondary,
-    marginBottom: 10,
+    fontSize: 13,
+    color: C.textMuted,
     textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    marginBottom: 10,
   },
-  emptyState: {
+  emptyWrap: {
     flex: 1,
     alignItems: "center" as const,
     justifyContent: "center" as const,
-    gap: 12,
-    paddingBottom: 80,
+    gap: 10,
+    paddingBottom: 60,
   },
   emptyText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 14,
+    fontSize: 13,
     color: C.textMuted,
     textAlign: "center" as const,
-    lineHeight: 20,
-    paddingHorizontal: 40,
   },
   logsList: {
-    gap: 8,
-    paddingBottom: 20,
+    gap: 6,
+    paddingBottom: 16,
   },
+
   logItem: {
-    backgroundColor: C.cardBg,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: C.surfaceCard,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.border,
     padding: 12,
-    gap: 8,
+    gap: 10,
   },
-  logRow: {
+  logIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  logInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  logTopRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
   },
-  providerBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  providerText: {
+  logProvider: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
-  logTime: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: C.textMuted,
-  },
-  logTrx: {
-    fontFamily: "Inter_500Medium",
     fontSize: 13,
     color: C.textPrimary,
+  },
+  logAmountTk: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: C.textPrimary,
+    letterSpacing: -0.3,
+  },
+  logBottomRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
+  logTrxId: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: C.textMuted,
     flex: 1,
     marginRight: 8,
   },
-  logAmount: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
-    color: C.teal,
-  },
-  statusBadge: {
+  logMetaRight: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 6,
   },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  statusPill: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  statusText: {
+  statusDotSm: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  statusPillText: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 10,
-    letterSpacing: 0.5,
+    fontSize: 9,
+    letterSpacing: 0.3,
   },
-  logError: {
+  logTime: {
     fontFamily: "Inter_400Regular",
-    fontSize: 11,
+    fontSize: 10,
     color: C.textMuted,
-    flex: 1,
-    textAlign: "right" as const,
-    marginLeft: 8,
   },
 });
