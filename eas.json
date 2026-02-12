@@ -10,6 +10,9 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug"
+      },
+      "env": {
+        "ORG_GRADLE_PROJECT_newArchEnabled": "true"
       }
     },
     "preview": {
@@ -18,7 +21,8 @@
       },
       "env": {
         "APP_VARIANT": "preview",
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
+        "EAS_SKIP_AUTO_FINGERPRINT": "1",
+        "ORG_GRADLE_PROJECT_newArchEnabled": "true"
       }
     },
     "production": {
@@ -27,7 +31,8 @@
       },
       "env": {
         "APP_VARIANT": "production",
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
+        "EAS_SKIP_AUTO_FINGERPRINT": "1",
+        "ORG_GRADLE_PROJECT_newArchEnabled": "true"
       },
       "autoIncrement": true
     }
