@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { parseMessage } from "./parser";
 import { isDuplicate, markAsSent } from "./dedupe";
 import { sendTransaction } from "./api-client";
@@ -8,6 +9,7 @@ type LogCallback = (log: TransactionLog) => void;
 let logCallback: LogCallback | null = null;
 let debugMode = false;
 let processing = false;
+let nativeListenerActive = false;
 const queue: Array<{ sender: string; message: string }> = [];
 
 export function setLogCallback(cb: LogCallback): void {
@@ -96,4 +98,46 @@ export async function handleIncomingNotification(
   if (!sender || !message) return;
   queue.push({ sender, message });
   processQueue();
+}
+
+export function startNativeListener(): void {
+  if (Platform.OS !== "android" || nativeListenerActive) return;
+
+  try {
+    const NativeModules = require("react-native").NativeModules;
+    const { NativeEventEmitter } = require("react-native");
+
+    let PayliteBridge: any = null;
+    try {
+      PayliteBridge = NativeModules.PayliteBridge;
+    } catch {}
+
+    if (!PayliteBridge) {
+      try {
+        const ExpoModules = require("expo-modules-core");
+        PayliteBridge = ExpoModules.requireNativeModule("PayliteBridge");
+      } catch {}
+    }
+
+    if (!PayliteBridge) {
+      if (debugMode) console.log("[Paylite] Native bridge not available (expected in Expo Go)");
+      return;
+    }
+
+    const emitter = new NativeEventEmitter(PayliteBridge);
+    emitter.addListener("onPaymentNotification", (event: any) => {
+      if (event?.sender && event?.message) {
+        handleIncomingNotification(event.sender, event.message);
+      }
+    });
+
+    nativeListenerActive = true;
+    if (debugMode) console.log("[Paylite] Native listener connected");
+  } catch (e: any) {
+    if (debugMode) console.log("[Paylite] Native listener not available:", e.message);
+  }
+}
+
+export function isNativeListenerActive(): boolean {
+  return nativeListenerActive;
 }

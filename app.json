@@ -7,11 +7,11 @@
     "icon": "./assets/images/icon.png",
     "scheme": "paylite",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A1628"
+      "backgroundColor": "#060D1B"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,12 +19,19 @@
     },
     "android": {
       "package": "com.paylite.app",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#0A1628",
+        "backgroundColor": "#060D1B",
         "foregroundImage": "./assets/images/icon.png"
       },
-      "permissions": [],
+      "permissions": [
+        "RECEIVE_SMS",
+        "READ_SMS",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS"
+      ],
       "allowBackup": false
     },
     "web": {
@@ -38,8 +45,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/withNotificationListener"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -47,7 +54,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "1d729409-1789-460f-b43e-d2af4db3eb56"
       }
     },
     "updates": {
