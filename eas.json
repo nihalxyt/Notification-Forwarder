@@ -17,10 +17,12 @@
     },
     "preview": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PnewArchEnabled=true"
       },
       "env": {
         "APP_VARIANT": "preview",
+        "NODE_ENV": "production",
         "EAS_SKIP_AUTO_FINGERPRINT": "1",
         "ORG_GRADLE_PROJECT_newArchEnabled": "true",
         "EAS_BUILD_CLEAR_CACHE": "1"
@@ -28,10 +30,12 @@
     },
     "production": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PnewArchEnabled=true"
       },
       "env": {
         "APP_VARIANT": "production",
+        "NODE_ENV": "production",
         "EAS_SKIP_AUTO_FINGERPRINT": "1",
         "ORG_GRADLE_PROJECT_newArchEnabled": "true",
         "EAS_BUILD_CLEAR_CACHE": "1"
