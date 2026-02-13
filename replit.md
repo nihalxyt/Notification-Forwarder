@@ -1,7 +1,7 @@
 # Paylite
 
 ## Overview
-Paylite is an Android mobile app (React Native + Expo) that listens for payment notifications from bKash, NAGAD, and Rocket, parses transaction details, and forwards them securely to a backend API at https://api.nihalhub.store.
+Paylite is an Android mobile app (React Native + Expo) that captures payment SMS from bKash, NAGAD, and Rocket via direct SMS reading (RECEIVE_SMS + READ_SMS), parses transaction details, and forwards them securely to a backend API at https://api.nihalhub.store. SMS-only approach - no NotificationListenerService or foreground services for zero battery impact.
 
 ## Architecture
 - **Frontend**: Expo Router (file-based routing), React Native, TypeScript
@@ -9,30 +9,28 @@ Paylite is an Android mobile app (React Native + Expo) that listens for payment 
 - **State**: React Context + AsyncStorage for logs, expo-secure-store for credentials
 - **API Client**: JWT auth with auto re-login on 401, exponential backoff retry (1s, 3s, 8s)
 - **Dedupe**: AsyncStorage-based with 7-day TTL, keyed on provider+trx_id+amount_paisa
-- **Native**: Expo config plugin copies Kotlin services into Android build
+- **Native**: Expo config plugin copies Kotlin SMS receiver + bridge into Android build
+- **SMS Detection**: Event-driven BroadcastReceiver - only activates when SMS arrives (zero background overhead)
 
 ## Key Files
-- `lib/parser.ts` - SMS/notification parser for bKash, NAGAD, Rocket
+- `lib/parser.ts` - SMS parser for bKash, NAGAD, Rocket (incoming payments only)
 - `lib/dedupe.ts` - Transaction deduplication with TTL
 - `lib/api-client.ts` - Backend API client with auth, retry, user-friendly error messages
 - `lib/secure-storage.ts` - Secure credential storage (SecureStore on native, AsyncStorage on web)
-- `lib/notification-bridge.ts` - Bridge between native notification listener and app logic + offline queue integration
+- `lib/notification-bridge.ts` - Bridge between native SMS receiver and app logic + offline queue
 - `lib/offline-queue.ts` - Offline transaction queue with auto-retry on network reconnect (max 100 queued, 10 retries)
+- `lib/status-notification.ts` - Persistent "Listening" status notification (low priority, no sound/vibration)
 - `lib/app-context.tsx` - Global app state provider (always-active listening when logged in)
 - `app/index.tsx` - Main dashboard screen with KeyboardAvoidingView login, always-active status
-- `app/settings.tsx` - Settings screen (permissions, offline queue count)
-- `plugins/withNotificationListener.js` - Expo config plugin that injects Kotlin services + AndroidManifest entries
-- `native-android-notification-listener/PaymentNotificationListenerService.kt` - NotificationListenerService
-- `native-android-notification-listener/PaymentSmsReceiver.kt` - SMS BroadcastReceiver
-- `native-android-notification-listener/PayliteBridgeModule.kt` - Expo native module bridge
+- `app/settings.tsx` - Settings screen (SMS permissions, notification permission, offline queue count)
+- `plugins/withNotificationListener.js` - Expo config plugin that injects Kotlin SMS receiver + bridge + AndroidManifest entries
+- `native-android-notification-listener/PaymentSmsReceiver.kt` - SMS BroadcastReceiver (filters bKash/NAGAD/Rocket)
+- `native-android-notification-listener/PayliteBridgeModule.kt` - Expo native module bridge (emits onPaymentSms events)
+- `native-android-notification-listener/PayliteBridgePackage.kt` - React Native package registration
 
 ## Android Permissions
 - RECEIVE_SMS, READ_SMS - Direct SMS reading from payment providers
-- RECEIVE_BOOT_COMPLETED - Auto-start on device boot
-- FOREGROUND_SERVICE - Background operation
-- WAKE_LOCK - Prevent CPU sleep during processing
-- POST_NOTIFICATIONS - Show notification access request
-- BIND_NOTIFICATION_LISTENER_SERVICE - Notification capture service
+- POST_NOTIFICATIONS - Show "Listening" status notification
 
 ## Supported Payment Providers
 - bKash (sender: "bKash") - "You have received Tk X.XX ... TrxID ..."
@@ -52,14 +50,17 @@ Paylite is an Android mobile app (React Native + Expo) that listens for payment 
 - EAS project ID: 1d729409-1789-460f-b43e-d2af4db3eb56
 
 ## Recent Changes
+- 2026-02-13: Removed NotificationListenerService - fully SMS-only approach
+- 2026-02-13: Removed FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED permissions
+- 2026-02-13: Added persistent "Listening" status notification (low priority, silent)
+- 2026-02-13: Updated notification-bridge to SMS-only event flow (onPaymentSms)
+- 2026-02-13: Simplified settings - removed notification listener option
 - 2026-02-12: Removed debug mode UI and pause toggle (always active when logged in)
 - 2026-02-12: Changed footer to "Powered by Nihal X"
 - 2026-02-12: Implemented offline queue with auto-retry on network reconnect
-- 2026-02-12: Settings shows pending queue count if offline transactions exist
 - 2026-02-12: Fixed login error handling - shows friendly messages instead of raw JSON
 - 2026-02-12: Added KeyboardAvoidingView for login screen
-- 2026-02-12: Created Expo config plugin for native notification services
-- 2026-02-12: Added SMS/notification permissions to app.json
+- 2026-02-12: Created Expo config plugin for native SMS receiver
 - 2026-02-12: Disabled newArch + added ProGuard for smaller APK
 - 2026-02-12: Added PayliteBridgeModule for native event communication
 - 2026-02-12: Removed unused files (drizzle, shared schema, storage)
