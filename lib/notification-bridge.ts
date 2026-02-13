@@ -5,6 +5,7 @@ import { isDuplicate, markAsSent } from "./dedupe";
 import { sendTransaction } from "./api-client";
 import { TransactionLog, ParsedTransaction } from "./types";
 import { enqueue, flushQueue, setFlushCallback, startNetworkMonitor } from "./offline-queue";
+import { getToken, getDeviceKey } from "./secure-storage";
 
 type LogCallback = (log: TransactionLog) => void;
 
@@ -164,6 +165,60 @@ export function initOfflineQueue(): void {
   flushQueue().catch(() => {});
 }
 
+export async function saveCredentialsToNative(): Promise<void> {
+  if (Platform.OS !== "android") return;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.saveCredentials) return;
+
+    const [deviceKey, token] = await Promise.all([
+      getDeviceKey(),
+      getToken(),
+    ]);
+
+    if (deviceKey) {
+      PayliteBridge.saveCredentials(deviceKey, token || "");
+      console.log("[Paylite] Credentials saved to native SharedPreferences");
+    }
+  } catch (e: any) {
+    console.warn("[Paylite] Failed to save credentials to native:", e?.message);
+  }
+}
+
+export async function updateNativeToken(token: string): Promise<void> {
+  if (Platform.OS !== "android") return;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.updateToken) return;
+    PayliteBridge.updateToken(token);
+  } catch {}
+}
+
+export async function triggerNativeUpload(): Promise<void> {
+  if (Platform.OS !== "android") return;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.triggerUpload) return;
+    PayliteBridge.triggerUpload();
+    console.log("[Paylite] Native upload triggered");
+  } catch {}
+}
+
+export async function getNativeQueueCount(): Promise<number> {
+  if (Platform.OS !== "android") return 0;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.getNativeQueueCount) return 0;
+    return await PayliteBridge.getNativeQueueCount();
+  } catch {
+    return 0;
+  }
+}
+
 export function startSmsListener(): void {
   if (Platform.OS !== "android" || smsListenerActive) return;
 
@@ -187,6 +242,9 @@ export function startSmsListener(): void {
 
     smsListenerActive = true;
     console.log("[Paylite] SMS listener active - waiting for bKash/NAGAD/Rocket SMS");
+
+    saveCredentialsToNative();
+    triggerNativeUpload();
   } catch (e: any) {
     console.error("[Paylite] Failed to start SMS listener:", e?.message);
   }

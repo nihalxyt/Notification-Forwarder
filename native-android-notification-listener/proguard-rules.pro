@@ -1,6 +1,5 @@
 # ============================================
 # Paylite Production ProGuard/R8 Rules
-# Maximum obfuscation + optimization
 # ============================================
 
 # React Native core
@@ -13,9 +12,15 @@
 -keep class expo.modules.** { *; }
 -dontwarn expo.modules.**
 
-# Paylite NotificationListenerService (must be accessible)
--keep class com.paylite.app.PaymentNotificationListener { *; }
--keep class com.paylite.app.PaymentNotificationListener$* { *; }
+# Paylite native classes (must be accessible)
+-keep class com.paylite.app.PaymentSmsReceiver { *; }
+-keep class com.paylite.app.SmsUploadWorker { *; }
+-keep class com.paylite.app.PayliteBridgeModule { *; }
+-keep class com.paylite.app.PayliteBridgePackage { *; }
+
+# WorkManager
+-keep class androidx.work.** { *; }
+-dontwarn androidx.work.**
 
 # Keep annotation
 -keepattributes *Annotation*
