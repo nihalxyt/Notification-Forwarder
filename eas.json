@@ -17,7 +17,8 @@
     },
     "preview": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PnewArchEnabled=true"
       },
       "env": {
         "APP_VARIANT": "preview",
@@ -27,7 +28,8 @@
     },
     "production": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PnewArchEnabled=true"
       },
       "env": {
         "APP_VARIANT": "production",

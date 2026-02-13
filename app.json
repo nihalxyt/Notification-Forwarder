@@ -32,7 +32,8 @@
         "WAKE_LOCK",
         "POST_NOTIFICATIONS"
       ],
-      "allowBackup": false
+      "allowBackup": false,
+      "newArchEnabled": true
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
