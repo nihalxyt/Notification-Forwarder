@@ -27,7 +27,10 @@
       "permissions": [
         "RECEIVE_SMS",
         "READ_SMS",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
       ],
       "allowBackup": false,
       "newArchEnabled": true

@@ -7,9 +7,6 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -23,8 +20,8 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
         private const val KEY_TOKEN = "access_token"
         private const val KEY_SENT_IDS = "sent_ids"
         private const val BASE_URL = "https://api.nihalhub.store"
-        private const val TIMEOUT_MS = 10000
-        private const val MAX_SENT_IDS = 500
+        private const val TIMEOUT_MS = 12000
+        private const val MAX_SENT_IDS = 2000
 
         fun getPrefs(context: Context): SharedPreferences {
             return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -36,7 +33,7 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
             val sentIds = getSentIds(prefs)
             val dedupeKey = "${provider}_${trxId}_${amountPaisa}"
             if (sentIds.contains(dedupeKey)) {
-                Log.d(TAG, "Duplicate detected in native queue: $dedupeKey")
+                Log.d(TAG, "Duplicate detected in native layer: $dedupeKey")
                 return
             }
 
@@ -60,17 +57,9 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
             }
             queue.put(item)
 
-            if (queue.length() > 100) {
-                val trimmed = JSONArray()
-                for (i in (queue.length() - 100) until queue.length()) {
-                    trimmed.put(queue.getJSONObject(i))
-                }
-                prefs.edit().putString(KEY_QUEUE, trimmed.toString()).apply()
-            } else {
-                prefs.edit().putString(KEY_QUEUE, queue.toString()).apply()
-            }
+            prefs.edit().putString(KEY_QUEUE, queue.toString()).apply()
 
-            Log.d(TAG, "SMS enqueued: $provider $trxId (queue size: ${queue.length()})")
+            Log.d(TAG, "SMS enqueued natively: $provider $trxId amount=$amountPaisa (queue=${queue.length()})")
         }
 
         fun getQueue(prefs: SharedPreferences): JSONArray {
@@ -107,11 +96,11 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
             return Result.success()
         }
 
-        Log.d(TAG, "Processing ${queue.length()} items from queue")
+        Log.d(TAG, "Processing ${queue.length()} items from native queue")
 
         val deviceKey = prefs.getString(KEY_DEVICE_KEY, null)
         if (deviceKey.isNullOrBlank()) {
-            Log.w(TAG, "No device key saved, cannot upload. Will retry when app provides key.")
+            Log.w(TAG, "No device key in native storage, will retry when app provides key")
             return Result.retry()
         }
 
@@ -119,7 +108,7 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
         if (token.isNullOrBlank()) {
             token = doLogin(deviceKey, prefs)
             if (token == null) {
-                Log.w(TAG, "Login failed, will retry")
+                Log.w(TAG, "Login failed, will retry later")
                 return Result.retry()
             }
         }
@@ -136,11 +125,16 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
                 continue
             }
 
+            val dedupeKey = "${item.optString("provider")}_${item.optString("trx_id")}_${item.optLong("amount_paisa")}"
+            if (getSentIds(prefs).contains(dedupeKey)) {
+                Log.d(TAG, "Skipping already-sent item: $dedupeKey")
+                continue
+            }
+
             val result = uploadSms(item, token!!)
 
             when (result) {
                 UploadResult.SUCCESS -> {
-                    val dedupeKey = "${item.optString("provider")}_${item.optString("trx_id")}_${item.optLong("amount_paisa")}"
                     addSentId(prefs, dedupeKey)
                     anySuccess = true
                     Log.d(TAG, "Uploaded: ${item.optString("provider")} ${item.optString("trx_id")}")
@@ -150,7 +144,6 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
                     if (token != null) {
                         val retry = uploadSms(item, token)
                         if (retry == UploadResult.SUCCESS) {
-                            val dedupeKey = "${item.optString("provider")}_${item.optString("trx_id")}_${item.optLong("amount_paisa")}"
                             addSentId(prefs, dedupeKey)
                             anySuccess = true
                         } else {
@@ -162,12 +155,17 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
                         authFailed = true
                     }
                 }
+                UploadResult.DUPLICATE -> {
+                    addSentId(prefs, dedupeKey)
+                    Log.d(TAG, "Server reported duplicate: $dedupeKey")
+                }
                 UploadResult.NETWORK_ERROR -> {
                     remaining.put(item)
                     for (j in (i + 1) until queue.length()) {
                         queue.optJSONObject(j)?.let { remaining.put(it) }
                     }
                     prefs.edit().putString(KEY_QUEUE, remaining.toString()).apply()
+                    Log.d(TAG, "Network error, ${remaining.length()} items remaining, will retry")
                     return Result.retry()
                 }
                 UploadResult.SERVER_ERROR -> {
@@ -179,11 +177,11 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
         prefs.edit().putString(KEY_QUEUE, remaining.toString()).apply()
 
         if (remaining.length() > 0) {
-            Log.d(TAG, "Done. ${remaining.length()} items remaining in queue")
+            Log.d(TAG, "Done batch. ${remaining.length()} items remaining in queue, will retry")
             return Result.retry()
         }
 
-        Log.d(TAG, "All items uploaded successfully")
+        Log.d(TAG, "All ${queue.length()} items uploaded successfully")
         return Result.success()
     }
 
@@ -209,15 +207,15 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
                 val token = json.optString("access_token", "")
                 if (token.isNotBlank()) {
                     prefs.edit().putString(KEY_TOKEN, token).apply()
-                    Log.d(TAG, "Login successful, token saved")
+                    Log.d(TAG, "Native login successful, token saved")
                     return token
                 }
             } else {
-                Log.w(TAG, "Login failed with status $code")
+                Log.w(TAG, "Native login failed with status $code")
             }
             conn.disconnect()
         } catch (e: Exception) {
-            Log.e(TAG, "Login error", e)
+            Log.e(TAG, "Native login error", e)
         }
         return null
     }
@@ -251,6 +249,7 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
             return when {
                 code in 200..299 -> UploadResult.SUCCESS
                 code == 401 -> UploadResult.AUTH_FAILED
+                code == 409 -> UploadResult.DUPLICATE
                 code in 500..599 -> UploadResult.SERVER_ERROR
                 else -> UploadResult.SERVER_ERROR
             }
@@ -260,6 +259,8 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
             return UploadResult.NETWORK_ERROR
         } catch (e: java.net.SocketTimeoutException) {
             return UploadResult.NETWORK_ERROR
+        } catch (e: java.io.IOException) {
+            return UploadResult.NETWORK_ERROR
         } catch (e: Exception) {
             Log.e(TAG, "Upload error", e)
             return UploadResult.NETWORK_ERROR
@@ -267,6 +268,6 @@ class SmsUploadWorker(context: Context, params: WorkerParameters) : Worker(conte
     }
 
     private enum class UploadResult {
-        SUCCESS, AUTH_FAILED, NETWORK_ERROR, SERVER_ERROR
+        SUCCESS, AUTH_FAILED, NETWORK_ERROR, SERVER_ERROR, DUPLICATE
     }
 }

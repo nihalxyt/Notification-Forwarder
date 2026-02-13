@@ -7,6 +7,7 @@ import {
   useMemo,
   ReactNode,
 } from "react";
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { TransactionLog } from "./types";
 import {
@@ -17,13 +18,14 @@ import {
   clearAuth,
 } from "./secure-storage";
 import { login } from "./api-client";
-import { setLogCallback, startSmsListener, initOfflineQueue, saveCredentialsToNative, getNativeQueueCount } from "./notification-bridge";
+import { setLogCallback, startSmsListener, initOfflineQueue, saveCredentialsToNative, getNativeQueueCount, triggerNativeUpload } from "./notification-bridge";
 import { getPendingCount } from "./offline-queue";
 import { cleanExpiredEntries } from "./dedupe";
 import { showListeningNotification, dismissListeningNotification } from "./status-notification";
+import { requestAllPermissions } from "./permissions";
 
 const LOGS_KEY = "paylite_logs";
-const MAX_LOGS = 50;
+const MAX_LOGS = 200;
 
 interface AppContextValue {
   isLoggedIn: boolean;
@@ -77,9 +79,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoggedIn) {
+      if (Platform.OS === "android") {
+        requestAllPermissions().then((perms) => {
+          console.log("[Paylite] Permissions: SMS=", perms.sms, "Notif=", perms.notification);
+          if (perms.notification) {
+            showListeningNotification();
+          }
+        }).catch(() => {});
+      }
+
       startSmsListener();
       initOfflineQueue();
       showListeningNotification();
+
+      triggerNativeUpload();
     } else {
       dismissListeningNotification();
     }
