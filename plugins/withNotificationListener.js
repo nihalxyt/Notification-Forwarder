@@ -119,22 +119,17 @@ function addNotificationListenerService(config) {
         let mainApp = fs.readFileSync(mainAppPath, "utf-8");
 
         if (!mainApp.includes("PayliteBridgePackage")) {
-          mainApp = mainApp.replace(
-            /override fun getPackages\(\): List<ReactPackage>\s*\{/,
-            `override fun getPackages(): List<ReactPackage> {\n            packages.add(${pkg}.PayliteBridgePackage())`
-          );
+          const addLine = `            add(PayliteBridgePackage())`;
 
-          if (!mainApp.includes("PayliteBridgePackage")) {
+          if (mainApp.includes(".packages.apply {")) {
             mainApp = mainApp.replace(
-              /val packages = PackageList\(this\)\.packages/,
-              `val packages = PackageList(this).packages\n            packages.add(${pkg}.PayliteBridgePackage())`
+              /\.packages\.apply\s*\{/,
+              `.packages.apply {\n${addLine}`
             );
-          }
-
-          if (!mainApp.includes("PayliteBridgePackage")) {
+          } else if (mainApp.includes("PackageList(this).packages")) {
             mainApp = mainApp.replace(
               /PackageList\(this\)\.packages/,
-              `PackageList(this).packages.toMutableList().apply { add(${pkg}.PayliteBridgePackage()) }`
+              `PackageList(this).packages.toMutableList().apply { add(PayliteBridgePackage()) }`
             );
           }
 
