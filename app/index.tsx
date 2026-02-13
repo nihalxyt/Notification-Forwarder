@@ -19,9 +19,9 @@ import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
-import Colors from "@/constants/colors";
-import { useApp } from "@/lib/app-context";
-import { TransactionLog, Provider } from "@/lib/types";
+import Colors from "../constants/colors";
+import { useApp } from "../lib/app-context";
+import { TransactionLog, Provider } from "../lib/types";
 
 const C = Colors.light;
 

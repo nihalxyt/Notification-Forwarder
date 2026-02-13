@@ -6,8 +6,8 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { reloadAppAsync } from "expo";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { queryClient } from "@/lib/query-client";
-import { AppProvider } from "@/lib/app-context";
+import { queryClient } from "../lib/query-client";
+import { AppProvider } from "../lib/app-context";
 import {
   useFonts,
   Inter_400Regular,

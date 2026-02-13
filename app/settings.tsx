@@ -15,8 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import Colors from "@/constants/colors";
-import { useApp } from "@/lib/app-context";
+import Colors from "../constants/colors";
+import { useApp } from "../lib/app-context";
 
 const C = Colors.light;
 
