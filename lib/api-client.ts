@@ -5,6 +5,7 @@ import {
   getDeviceKey,
   clearAuth,
 } from "./secure-storage";
+import { updateNativeToken } from "./notification-bridge";
 
 const BASE_URL = "https://api.nihalhub.store";
 const TIMEOUT_MS = 8000;
@@ -146,6 +147,8 @@ export async function login(deviceKey: string): Promise<{
 
     const expiry = parseJwtExpiry(data.access_token);
     await saveToken(data.access_token, expiry);
+
+    updateNativeToken(data.access_token).catch(() => {});
 
     return { success: true, expiry };
   } catch (error: any) {

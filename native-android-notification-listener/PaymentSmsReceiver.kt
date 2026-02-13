@@ -3,6 +3,7 @@ package com.paylite.app
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import android.provider.Telephony
 import android.util.Log
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -20,6 +21,8 @@ class PaymentSmsReceiver : BroadcastReceiver() {
         const val EXTRA_SENDER = "sender"
         const val EXTRA_MESSAGE = "message"
         private const val WORK_NAME = "paylite_sms_upload"
+        private const val WAKE_LOCK_TAG = "paylite:sms_processing"
+        private const val WAKE_LOCK_TIMEOUT = 10000L
 
         private val SENDER_MAP = mapOf(
             "bkash" to "bKash",
@@ -43,6 +46,11 @@ class PaymentSmsReceiver : BroadcastReceiver() {
         if (context == null || intent == null) return
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
+        val pendingResult = goAsync()
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+        wakeLock?.acquire(WAKE_LOCK_TIMEOUT)
+
         try {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             if (messages.isNullOrEmpty()) return
@@ -53,6 +61,8 @@ class PaymentSmsReceiver : BroadcastReceiver() {
                 val body = msg.messageBody ?: continue
                 grouped.getOrPut(addr) { StringBuilder() }.append(body)
             }
+
+            var enqueued = false
 
             for ((address, bodyBuilder) in grouped) {
                 val body = bodyBuilder.toString().trim()
@@ -69,26 +79,32 @@ class PaymentSmsReceiver : BroadcastReceiver() {
                 SmsUploadWorker.enqueueSms(
                     context,
                     sender,
-                    body.take(500),
+                    body.take(1000),
                     parsed.provider,
                     parsed.trxId,
                     parsed.amountPaisa
                 )
-
-                enqueueUploadWork(context)
+                enqueued = true
 
                 try {
                     val broadcast = Intent(ACTION_PAYMENT).apply {
                         putExtra(EXTRA_SENDER, sender)
-                        putExtra(EXTRA_MESSAGE, body.take(500))
+                        putExtra(EXTRA_MESSAGE, body.take(1000))
                     }
                     LocalBroadcastManager.getInstance(context).sendBroadcast(broadcast)
                 } catch (e: Exception) {
                     Log.d(TAG, "LocalBroadcast failed (app may be closed): ${e.message}")
                 }
             }
+
+            if (enqueued) {
+                enqueueUploadWork(context)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing SMS", e)
+        } finally {
+            try { wakeLock?.release() } catch (_: Exception) {}
+            try { pendingResult.finish() } catch (_: Exception) {}
         }
     }
 
