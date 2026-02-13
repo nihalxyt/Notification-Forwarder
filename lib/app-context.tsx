@@ -17,7 +17,7 @@ import {
   clearAuth,
 } from "./secure-storage";
 import { login } from "./api-client";
-import { setLogCallback, startNativeListener, initOfflineQueue } from "./notification-bridge";
+import { setLogCallback, startSmsListener, initOfflineQueue } from "./notification-bridge";
 import { getPendingCount } from "./offline-queue";
 import { cleanExpiredEntries } from "./dedupe";
 
@@ -74,7 +74,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoggedIn) {
-      startNativeListener();
+      startSmsListener();
       initOfflineQueue();
     }
   }, [isLoggedIn]);

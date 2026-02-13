@@ -11,12 +11,9 @@ class PaymentSmsReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "PayliteSMS"
-
-        private val EXACT_SENDERS = setOf(
-            "bkash",
-            "nagad",
-            "16216",
-        )
+        const val ACTION_PAYMENT = "com.paylite.PAYMENT_NOTIFICATION"
+        const val EXTRA_SENDER = "sender"
+        const val EXTRA_MESSAGE = "message"
 
         private val SENDER_MAP = mapOf(
             "bkash" to "bKash",
@@ -24,10 +21,9 @@ class PaymentSmsReceiver : BroadcastReceiver() {
             "16216" to "16216",
         )
 
-        private val MONEY_RECEIVED_PATTERNS = listOf(
-            Regex("you have received", RegexOption.IGNORE_CASE),
-            Regex("money received", RegexOption.IGNORE_CASE),
-            Regex("Tk[\\d,.]+\\s*received", RegexOption.IGNORE_CASE),
+        private val MONEY_KEYWORDS = listOf(
+            "received",
+            "money received",
         )
     }
 
@@ -48,17 +44,17 @@ class PaymentSmsReceiver : BroadcastReceiver() {
 
             for ((address, bodyBuilder) in grouped) {
                 val body = bodyBuilder.toString().trim()
-                if (body.isEmpty() || body.length < 20) continue
+                if (body.isEmpty() || body.length < 15) continue
 
                 val sender = resolveStrictSender(address) ?: continue
 
-                if (!isMoneyReceived(body)) continue
+                if (!containsMoneyKeyword(body)) continue
 
-                Log.d(TAG, "Payment SMS from $sender: ${body.take(60)}...")
+                Log.d(TAG, "Payment SMS from $sender: ${body.take(80)}...")
 
-                val broadcast = Intent(PaymentNotificationListenerService.ACTION_PAYMENT).apply {
-                    putExtra(PaymentNotificationListenerService.EXTRA_SENDER, sender)
-                    putExtra(PaymentNotificationListenerService.EXTRA_MESSAGE, body.take(500))
+                val broadcast = Intent(ACTION_PAYMENT).apply {
+                    putExtra(EXTRA_SENDER, sender)
+                    putExtra(EXTRA_MESSAGE, body.take(500))
                 }
                 LocalBroadcastManager.getInstance(context).sendBroadcast(broadcast)
             }
@@ -70,18 +66,15 @@ class PaymentSmsReceiver : BroadcastReceiver() {
     private fun resolveStrictSender(address: String): String? {
         val cleaned = address.lowercase().trim().replace(Regex("[^a-z0-9]"), "")
 
-        if (cleaned in EXACT_SENDERS) {
-            return SENDER_MAP[cleaned]
-        }
+        SENDER_MAP[cleaned]?.let { return it }
 
-        if (cleaned == "16216" || cleaned.endsWith("16216")) {
-            return "16216"
-        }
+        if (cleaned.endsWith("16216")) return "16216"
 
         return null
     }
 
-    private fun isMoneyReceived(body: String): Boolean {
-        return MONEY_RECEIVED_PATTERNS.any { it.containsMatchIn(body) }
+    private fun containsMoneyKeyword(body: String): Boolean {
+        val lower = body.lowercase()
+        return MONEY_KEYWORDS.any { lower.contains(it) }
     }
 }
