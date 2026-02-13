@@ -20,6 +20,7 @@ import { login } from "./api-client";
 import { setLogCallback, startSmsListener, initOfflineQueue } from "./notification-bridge";
 import { getPendingCount } from "./offline-queue";
 import { cleanExpiredEntries } from "./dedupe";
+import { showListeningNotification, dismissListeningNotification } from "./status-notification";
 
 const LOGS_KEY = "paylite_logs";
 const MAX_LOGS = 50;
@@ -76,6 +77,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isLoggedIn) {
       startSmsListener();
       initOfflineQueue();
+      showListeningNotification();
+    } else {
+      dismissListeningNotification();
     }
   }, [isLoggedIn]);
 
@@ -136,6 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    await dismissListeningNotification();
     await clearAuth();
     setIsLoggedIn(false);
     setTokenExpiry(null);
