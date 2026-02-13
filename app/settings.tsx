@@ -9,7 +9,6 @@ import {
   Platform,
   Alert,
   PermissionsAndroid,
-  NativeModules,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -79,24 +78,37 @@ export default function SettingsScreen() {
   const webTop = Platform.OS === "web" ? 67 : 0;
   const webBot = Platform.OS === "web" ? 34 : 0;
   const isAndroid = Platform.OS === "android";
+  const androidApiLevel = typeof Platform.Version === "string" ? parseInt(Platform.Version, 10) : Platform.Version;
 
   const [smsGranted, setSmsGranted] = useState(false);
+  const [notificationGranted, setNotificationGranted] = useState(Platform.OS !== "android");
 
-  const checkSmsPermission = useCallback(async () => {
+  const checkPermissions = useCallback(async () => {
     if (!isAndroid) return;
     try {
-      const result = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
-      );
-      setSmsGranted(result);
+      const [receiveSms, readSms] = await Promise.all([
+        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS),
+        PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS),
+      ]);
+      setSmsGranted(receiveSms && readSms);
+
+      if (androidApiLevel >= 33) {
+        const notif = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        setNotificationGranted(notif);
+      } else {
+        setNotificationGranted(true);
+      }
     } catch {
       setSmsGranted(false);
+      setNotificationGranted(false);
     }
-  }, [isAndroid]);
+  }, [androidApiLevel, isAndroid]);
 
   useEffect(() => {
-    checkSmsPermission();
-  }, [checkSmsPermission]);
+    checkPermissions();
+  }, [checkPermissions]);
 
   const requestSmsPermission = async () => {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
@@ -112,11 +124,18 @@ export default function SettingsScreen() {
         PermissionsAndroid.PERMISSIONS.READ_SMS,
       ]);
 
-      const smsResult = granted[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS];
+      const receiveResult = granted[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS];
+      const readResult = granted[PermissionsAndroid.PERMISSIONS.READ_SMS];
+      const fullyGranted =
+        receiveResult === PermissionsAndroid.RESULTS.GRANTED &&
+        readResult === PermissionsAndroid.RESULTS.GRANTED;
 
-      if (smsResult === PermissionsAndroid.RESULTS.GRANTED) {
+      if (fullyGranted) {
         setSmsGranted(true);
-      } else if (smsResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+      } else if (
+        receiveResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ||
+        readResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+      ) {
         Alert.alert(
           "Permission Required",
           "SMS permission was denied. Please enable it from app settings to receive payment SMS directly.",
@@ -130,6 +149,39 @@ export default function SettingsScreen() {
       }
     } catch {
       Alert.alert("Error", "Could not request SMS permission. Please try from your device settings.");
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+
+    if (!isAndroid) return;
+
+    if (androidApiLevel < 33) {
+      setNotificationGranted(true);
+      return;
+    }
+
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+      if (result === PermissionsAndroid.RESULTS.GRANTED) {
+        setNotificationGranted(true);
+      } else if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+        Alert.alert(
+          "Permission Required",
+          "Notification permission was denied. Please enable it from app settings.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
+      } else {
+        setNotificationGranted(false);
+      }
+    } catch {
+      Alert.alert("Error", "Could not request notification permission.");
     }
   };
 
@@ -215,10 +267,22 @@ export default function SettingsScreen() {
             icon="bell"
             iconBg={C.accentDim}
             iconColor={C.accent}
-            title="Notification Listener"
-            desc="Captures payment notifications from apps"
-            onPress={openNotificationAccess}
+            title="Notification Permission"
+            desc={notificationGranted ? "Granted - notifications allowed" : "Required for Android 13+"}
+            onPress={requestNotificationPermission}
             delay={80}
+            right={<StatusDot granted={notificationGranted} />}
+          />
+          <View style={styles.sep} />
+          <SettingItem
+            icon="bell-ring"
+            iconSet="material"
+            iconBg={C.accentDim}
+            iconColor={C.accent}
+            title="Notification Listener"
+            desc="Enable listener to capture payment SMS app alerts"
+            onPress={openNotificationAccess}
+            delay={100}
           />
           <View style={styles.sep} />
           <SettingItem
@@ -268,18 +332,22 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>2</Text></View>
-              <Text style={styles.guideText}>Enable Notification Listener in Android Settings</Text>
+              <Text style={styles.guideText}>Allow Notification permission (Android 13+)</Text>
             </View>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>3</Text></View>
-              <Text style={styles.guideText}>Disable Battery Optimization for Paylite</Text>
+              <Text style={styles.guideText}>Enable Notification Listener in Android Settings</Text>
             </View>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>4</Text></View>
-              <Text style={styles.guideText}>Enable Auto-Start if using Xiaomi, Huawei, Oppo, Vivo, or Realme</Text>
+              <Text style={styles.guideText}>Disable Battery Optimization for Paylite</Text>
             </View>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>5</Text></View>
+              <Text style={styles.guideText}>Enable Auto-Start if using Xiaomi, Huawei, Oppo, Vivo, or Realme</Text>
+            </View>
+            <View style={styles.guideStep}>
+              <View style={styles.guideNum}><Text style={styles.guideNumText}>6</Text></View>
               <Text style={styles.guideText}>Lock Paylite in Recent Apps to prevent system kill</Text>
             </View>
           </View>

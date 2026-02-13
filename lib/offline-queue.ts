@@ -46,6 +46,18 @@ async function saveQueue(queue: QueuedTransaction[]): Promise<void> {
 
 export async function enqueue(transaction: ParsedTransaction): Promise<void> {
   const queue = await loadQueue();
+
+  const alreadyQueued = queue.some(
+    (item) =>
+      item.transaction.provider === transaction.provider &&
+      item.transaction.trx_id === transaction.trx_id &&
+      item.transaction.amount_paisa === transaction.amount_paisa
+  );
+
+  if (alreadyQueued) {
+    return;
+  }
+
   const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
   queue.push({ id, transaction, timestamp: Date.now(), retries: 0 });
   await saveQueue(queue);
