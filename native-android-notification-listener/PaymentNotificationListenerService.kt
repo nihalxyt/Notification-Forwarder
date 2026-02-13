@@ -33,6 +33,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             "com.samsung.android.messaging",
             "com.oneplus.mms",
             "com.miui.mms",
+            "com.sonyericsson.conversations",
+            "com.htc.sense.mms",
         )
 
         private val MONEY_RECEIVED_PATTERNS = listOf(
@@ -51,20 +53,23 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             val title = extras.getCharSequence("android.title")?.toString()?.trim() ?: ""
             val text = extras.getCharSequence("android.text")?.toString()?.trim() ?: ""
             val bigText = extras.getCharSequence("android.bigText")?.toString()?.trim() ?: ""
+            val subText = extras.getCharSequence("android.subText")?.toString()?.trim() ?: ""
+            val infoText = extras.getCharSequence("android.infoText")?.toString()?.trim() ?: ""
+            val tickerText = sbn.notification?.tickerText?.toString()?.trim() ?: ""
 
-            val message = when {
-                bigText.isNotBlank() && bigText.length > text.length -> bigText
-                text.isNotBlank() -> text
-                else -> return
-            }
+            val candidates = listOf(bigText, tickerText, text, subText, infoText)
+                .filter { it.isNotBlank() }
+                .sortedByDescending { it.length }
 
-            if (message.length < 20) return
+            val message = candidates.firstOrNull() ?: return
+
+            if (message.length < 15) return
 
             val sender = resolveSender(pkg, title) ?: return
 
             if (!isMoneyReceived(message)) return
 
-            Log.d(TAG, "Payment from $sender: ${message.take(60)}...")
+            Log.d(TAG, "Payment detected from $sender (pkg=$pkg): ${message.take(80)}...")
             broadcastToApp(sender, message.take(500))
         } catch (e: Exception) {
             Log.e(TAG, "Error processing notification", e)
@@ -76,7 +81,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
     private fun resolveSender(pkg: String, title: String): String? {
         APP_PACKAGES[pkg]?.let { return it }
 
-        if (pkg in SMS_PACKAGES || pkg.contains("sms", ignoreCase = true) || pkg.contains("messaging", ignoreCase = true)) {
+        if (pkg in SMS_PACKAGES || pkg.contains("sms", ignoreCase = true) || pkg.contains("messaging", ignoreCase = true) || pkg.contains("mms", ignoreCase = true)) {
             val titleCleaned = title.lowercase().trim().replace(Regex("[^a-z0-9]"), "")
             EXACT_TITLE_MAP[titleCleaned]?.let { return it }
         }
@@ -94,5 +99,6 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             putExtra(EXTRA_MESSAGE, message)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        Log.d(TAG, "Broadcast sent for $sender")
     }
 }

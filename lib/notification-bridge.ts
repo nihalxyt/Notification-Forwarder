@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Platform, NativeModules, NativeEventEmitter } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { parseMessage } from "./parser";
 import { isDuplicate, markAsSent } from "./dedupe";
@@ -39,7 +39,12 @@ async function isOnline(): Promise<boolean> {
 async function processNotification(sender: string, message: string): Promise<void> {
   try {
     const parsed = parseMessage(sender, message);
-    if (!parsed) return;
+    if (!parsed) {
+      console.log("[Paylite] Message not parseable from", sender, message.slice(0, 80));
+      return;
+    }
+
+    console.log("[Paylite] Parsed:", parsed.provider, parsed.trx_id, parsed.amount_paisa);
 
     const duplicate = await isDuplicate(parsed.provider, parsed.trx_id, parsed.amount_paisa);
     if (duplicate) {
@@ -133,6 +138,7 @@ export async function handleIncomingNotification(
   message: string
 ): Promise<void> {
   if (!sender || !message) return;
+  console.log("[Paylite] Incoming from", sender, "len=", message.length);
   queue.push({ sender, message });
   processQueue();
 }
@@ -162,32 +168,28 @@ export function startNativeListener(): void {
   if (Platform.OS !== "android" || nativeListenerActive) return;
 
   try {
-    const NativeModules = require("react-native").NativeModules;
-    const { NativeEventEmitter } = require("react-native");
-
-    let PayliteBridge: any = null;
-    try {
-      PayliteBridge = NativeModules.PayliteBridge;
-    } catch {}
+    const PayliteBridge = NativeModules.PayliteBridge;
 
     if (!PayliteBridge) {
-      try {
-        const ExpoModules = require("expo-modules-core");
-        PayliteBridge = ExpoModules.requireNativeModule("PayliteBridge");
-      } catch {}
+      console.warn("[Paylite] PayliteBridge native module not found - events will not be received");
+      return;
     }
 
-    if (!PayliteBridge) return;
+    console.log("[Paylite] PayliteBridge module found, setting up listener...");
 
     const emitter = new NativeEventEmitter(PayliteBridge);
     emitter.addListener("onPaymentNotification", (event: any) => {
+      console.log("[Paylite] Native event received:", event?.sender);
       if (event?.sender && event?.message) {
         handleIncomingNotification(event.sender, event.message);
       }
     });
 
     nativeListenerActive = true;
-  } catch {}
+    console.log("[Paylite] Native listener active - waiting for payment events");
+  } catch (e: any) {
+    console.error("[Paylite] Failed to start native listener:", e?.message);
+  }
 }
 
 export function isNativeListenerActive(): boolean {
