@@ -17,7 +17,7 @@ import {
   clearAuth,
 } from "./secure-storage";
 import { login } from "./api-client";
-import { setLogCallback, startSmsListener, initOfflineQueue } from "./notification-bridge";
+import { setLogCallback, startSmsListener, initOfflineQueue, saveCredentialsToNative, getNativeQueueCount } from "./notification-bridge";
 import { getPendingCount } from "./offline-queue";
 import { cleanExpiredEntries } from "./dedupe";
 import { showListeningNotification, dismissListeningNotification } from "./status-notification";
@@ -66,7 +66,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       AsyncStorage.setItem(LOGS_KEY, JSON.stringify(updated)).catch(() => {});
       return updated;
     });
-    getPendingCount().then(setPendingCount).catch(() => {});
+    Promise.all([getPendingCount(), getNativeQueueCount()])
+      .then(([js, native]) => setPendingCount(js + native))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -103,8 +105,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           try { setLogs(JSON.parse(storedLogs)); } catch {}
         }
 
-        const pending = await getPendingCount();
-        setPendingCount(pending);
+        const [jsPending, nativePending] = await Promise.all([
+          getPendingCount(),
+          getNativeQueueCount(),
+        ]);
+        setPendingCount(jsPending + nativePending);
+
+        if (token && storedKey) {
+          saveCredentialsToNative().catch(() => {});
+        }
 
         cleanExpiredEntries().catch(() => {});
       } catch (e) {
@@ -126,6 +135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsLoggedIn(true);
         setTokenExpiry(result.expiry);
         setIsLoading(false);
+        saveCredentialsToNative().catch(() => {});
         return true;
       } else {
         setLoginError(result.error || "Login failed");

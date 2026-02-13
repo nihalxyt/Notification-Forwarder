@@ -68,6 +68,7 @@ function addSmsReceiver(config) {
         "PaymentSmsReceiver.kt",
         "PayliteBridgeModule.kt",
         "PayliteBridgePackage.kt",
+        "SmsUploadWorker.kt",
       ];
 
       for (const fileName of filesToCopy) {
@@ -104,6 +105,24 @@ function addSmsReceiver(config) {
           }
 
           fs.writeFileSync(mainAppPath, mainApp, "utf-8");
+        }
+      }
+
+      const buildGradlePath = path.join(
+        config.modRequest.platformProjectRoot,
+        "app",
+        "build.gradle"
+      );
+
+      if (fs.existsSync(buildGradlePath)) {
+        let buildGradle = fs.readFileSync(buildGradlePath, "utf-8");
+
+        if (!buildGradle.includes("work-runtime")) {
+          buildGradle = buildGradle.replace(
+            /dependencies\s*\{/,
+            `dependencies {\n    implementation "androidx.work:work-runtime-ktx:2.9.0"`
+          );
+          fs.writeFileSync(buildGradlePath, buildGradle, "utf-8");
         }
       }
 
