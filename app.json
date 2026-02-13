@@ -27,9 +27,6 @@
       "permissions": [
         "RECEIVE_SMS",
         "READ_SMS",
-        "RECEIVE_BOOT_COMPLETED",
-        "FOREGROUND_SERVICE",
-        "WAKE_LOCK",
         "POST_NOTIFICATIONS"
       ],
       "allowBackup": false,

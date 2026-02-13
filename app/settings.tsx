@@ -138,7 +138,7 @@ export default function SettingsScreen() {
       ) {
         Alert.alert(
           "Permission Required",
-          "SMS permission was denied. Please enable it from app settings to receive payment SMS directly.",
+          "SMS permission was denied. Please enable it from app settings.",
           [
             { text: "Cancel", style: "cancel" },
             { text: "Open Settings", onPress: () => Linking.openSettings() },
@@ -185,41 +185,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const openNotificationAccess = () => {
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-    if (isAndroid) {
-      try {
-        const intent = "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS";
-        Linking.sendIntent(intent).catch(() => {
-          Linking.openSettings();
-        });
-      } catch {
-        Linking.openSettings();
-      }
-    } else {
-      Alert.alert("Notification Access", "Open Notification Listener settings on your Android device to grant Paylite permission.");
-    }
-  };
-
-  const openBattery = () => {
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
-    if (isAndroid) {
-      try {
-        Linking.sendIntent("android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", [
-          { key: "package", value: "com.paylite.app" }
-        ]).catch(() => {
-          Linking.sendIntent("android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS").catch(() => {
-            Linking.openSettings();
-          });
-        });
-      } catch {
-        Linking.openSettings();
-      }
-    } else {
-      Alert.alert("Battery Optimization", "Disable battery optimization for Paylite in your Android device settings.");
-    }
-  };
-
   const handleClearLogs = () => {
     if (logs.length === 0) return;
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
@@ -257,7 +222,7 @@ export default function SettingsScreen() {
             iconBg={C.blueDim}
             iconColor={C.blue}
             title="SMS Read Access"
-            desc={smsGranted ? "Granted - reading bKash, NAGAD, Rocket SMS" : "Required to read payment SMS directly"}
+            desc={smsGranted ? "Granted - reading bKash, NAGAD, Rocket SMS" : "Required to read payment SMS"}
             onPress={requestSmsPermission}
             delay={40}
             right={<StatusDot granted={smsGranted} />}
@@ -268,31 +233,10 @@ export default function SettingsScreen() {
             iconBg={C.accentDim}
             iconColor={C.accent}
             title="Notification Permission"
-            desc={notificationGranted ? "Granted - notifications allowed" : "Required for Android 13+"}
+            desc={notificationGranted ? "Granted - status notification active" : "Allow status notification"}
             onPress={requestNotificationPermission}
             delay={80}
             right={<StatusDot granted={notificationGranted} />}
-          />
-          <View style={styles.sep} />
-          <SettingItem
-            icon="bell-ring"
-            iconSet="material"
-            iconBg={C.accentDim}
-            iconColor={C.accent}
-            title="Notification Listener"
-            desc="Enable listener to capture payment SMS app alerts"
-            onPress={openNotificationAccess}
-            delay={100}
-          />
-          <View style={styles.sep} />
-          <SettingItem
-            icon="battery-charging"
-            iconBg={C.greenDim}
-            iconColor={C.green}
-            title="Battery Optimization"
-            desc="Disable to keep Paylite active 24/7"
-            onPress={openBattery}
-            delay={120}
           />
         </View>
 
@@ -328,27 +272,15 @@ export default function SettingsScreen() {
           <View style={styles.guideCard}>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>1</Text></View>
-              <Text style={styles.guideText}>Grant SMS Read permission for direct SMS capture</Text>
+              <Text style={styles.guideText}>Grant SMS Read permission to capture payment SMS</Text>
             </View>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>2</Text></View>
-              <Text style={styles.guideText}>Allow Notification permission (Android 13+)</Text>
+              <Text style={styles.guideText}>Allow Notification permission for status updates</Text>
             </View>
             <View style={styles.guideStep}>
               <View style={styles.guideNum}><Text style={styles.guideNumText}>3</Text></View>
-              <Text style={styles.guideText}>Enable Notification Listener in Android Settings</Text>
-            </View>
-            <View style={styles.guideStep}>
-              <View style={styles.guideNum}><Text style={styles.guideNumText}>4</Text></View>
-              <Text style={styles.guideText}>Disable Battery Optimization for Paylite</Text>
-            </View>
-            <View style={styles.guideStep}>
-              <View style={styles.guideNum}><Text style={styles.guideNumText}>5</Text></View>
-              <Text style={styles.guideText}>Enable Auto-Start if using Xiaomi, Huawei, Oppo, Vivo, or Realme</Text>
-            </View>
-            <View style={styles.guideStep}>
-              <View style={styles.guideNum}><Text style={styles.guideNumText}>6</Text></View>
-              <Text style={styles.guideText}>Lock Paylite in Recent Apps to prevent system kill</Text>
+              <Text style={styles.guideText}>On Xiaomi/Huawei/Oppo: Enable Auto-Start for Paylite</Text>
             </View>
           </View>
         </Animated.View>

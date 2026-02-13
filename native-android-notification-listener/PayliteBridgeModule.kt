@@ -59,27 +59,27 @@ class PayliteBridgeModule(private val reactContext: ReactApplicationContext) : R
     private fun registerReceiver() {
         if (receiver != null) return
 
-        Log.d(TAG, "Registering broadcast receiver")
+        Log.d(TAG, "Registering broadcast receiver for SMS events")
 
         receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 val sender = intent?.getStringExtra(
-                    PaymentNotificationListenerService.EXTRA_SENDER
+                    PaymentSmsReceiver.EXTRA_SENDER
                 ) ?: return
                 val message = intent.getStringExtra(
-                    PaymentNotificationListenerService.EXTRA_MESSAGE
+                    PaymentSmsReceiver.EXTRA_MESSAGE
                 ) ?: return
 
-                Log.d(TAG, "Received broadcast from $sender: ${message.take(60)}...")
-                sendEvent("onPaymentNotification", sender, message)
+                Log.d(TAG, "Received SMS broadcast from $sender: ${message.take(60)}...")
+                sendEvent("onPaymentSms", sender, message)
             }
         }
 
         LocalBroadcastManager.getInstance(reactContext).registerReceiver(
             receiver!!,
-            IntentFilter(PaymentNotificationListenerService.ACTION_PAYMENT)
+            IntentFilter(PaymentSmsReceiver.ACTION_PAYMENT)
         )
-        Log.d(TAG, "Broadcast receiver registered")
+        Log.d(TAG, "Broadcast receiver registered for SMS events")
     }
 
     private fun unregisterReceiver() {

@@ -2,42 +2,13 @@ const { withAndroidManifest, withDangerousMod } = require("expo/config-plugins")
 const fs = require("fs");
 const path = require("path");
 
-function addNotificationListenerService(config) {
+function addSmsReceiver(config) {
   config = withAndroidManifest(config, (config) => {
     const manifest = config.modResults;
     const app = manifest.manifest.application?.[0];
     if (!app) return config;
 
-    if (!app.service) app.service = [];
     if (!app.receiver) app.receiver = [];
-
-    const hasNLS = app.service.some(
-      (s) =>
-        s.$?.["android:name"] === ".PaymentNotificationListenerService"
-    );
-    if (!hasNLS) {
-      app.service.push({
-        $: {
-          "android:name": ".PaymentNotificationListenerService",
-          "android:label": "Paylite Payment Listener",
-          "android:permission":
-            "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE",
-          "android:exported": "false",
-        },
-        "intent-filter": [
-          {
-            action: [
-              {
-                $: {
-                  "android:name":
-                    "android.service.notification.NotificationListenerService",
-                },
-              },
-            ],
-          },
-        ],
-      });
-    }
 
     const hasSMS = app.receiver.some(
       (r) => r.$?.["android:name"] === ".PaymentSmsReceiver"
@@ -94,7 +65,6 @@ function addNotificationListenerService(config) {
       );
 
       const filesToCopy = [
-        "PaymentNotificationListenerService.kt",
         "PaymentSmsReceiver.kt",
         "PayliteBridgeModule.kt",
         "PayliteBridgePackage.kt",
@@ -144,4 +114,4 @@ function addNotificationListenerService(config) {
   return config;
 }
 
-module.exports = addNotificationListenerService;
+module.exports = addSmsReceiver;

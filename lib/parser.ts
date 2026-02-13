@@ -6,12 +6,6 @@ const SENDER_WHITELIST: Record<string, Provider> = {
   "16216": "rocket",
 };
 
-const EXACT_SENDER_IDS = new Set([
-  "bkash",
-  "nagad",
-  "16216",
-]);
-
 function normalizeSender(sender: string): string {
   return sender.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -19,7 +13,7 @@ function normalizeSender(sender: string): string {
 export function isWhitelistedSender(sender: string): boolean {
   try {
     const key = normalizeSender(sender);
-    return EXACT_SENDER_IDS.has(key);
+    return key in SENDER_WHITELIST;
   } catch {
     return false;
   }
@@ -86,19 +80,19 @@ function extractRocket(message: string): { amount: number; trxId: string } | nul
   try {
     if (!/received/i.test(message)) return null;
 
-    if (/payment|sent|paid|transfer out|debit|cashout|withdraw|request/i.test(message)) return null;
+    if (/payment|sent|paid|transfer out|debit|cashout|withdraw|request|recharge/i.test(message)) return null;
 
-    const amountMatch = message.match(/Tk([\d,]+(?:\.\d{1,2})?)\s*received/i);
+    const amountMatch = message.match(/Tk\s*([\d,]+(?:\.\d{1,2})?)\s*received/i);
     if (!amountMatch) return null;
 
-    const trxIdMatch = message.match(/TxnId:(\d{8,15})/i);
+    const trxIdMatch = message.match(/TxnId:\s*([A-Z0-9]{6,15})/i);
     if (!trxIdMatch) return null;
 
     const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
     if (isNaN(amount) || amount <= 0 || amount > 99999999) return null;
 
-    const trxId = trxIdMatch[1].trim();
-    if (trxId.length < 8 || trxId.length > 15) return null;
+    const trxId = trxIdMatch[1].trim().toUpperCase();
+    if (trxId.length < 6 || trxId.length > 15) return null;
 
     return { amount, trxId };
   } catch {
@@ -117,7 +111,7 @@ export function parseMessage(
     if (!provider) return null;
 
     const message = rawMessage.slice(0, 1000).trim();
-    if (message.length < 20) return null;
+    if (message.length < 15) return null;
 
     let result: { amount: number; trxId: string } | null = null;
 
