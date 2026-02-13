@@ -97,6 +97,7 @@ function addNotificationListenerService(config) {
         "PaymentNotificationListenerService.kt",
         "PaymentSmsReceiver.kt",
         "PayliteBridgeModule.kt",
+        "PayliteBridgePackage.kt",
       ];
 
       for (const fileName of filesToCopy) {
@@ -110,6 +111,34 @@ function addNotificationListenerService(config) {
             `package ${pkg}`
           );
           fs.writeFileSync(destFile, content, "utf-8");
+        }
+      }
+
+      const mainAppPath = path.join(javaDir, "MainApplication.kt");
+      if (fs.existsSync(mainAppPath)) {
+        let mainApp = fs.readFileSync(mainAppPath, "utf-8");
+
+        if (!mainApp.includes("PayliteBridgePackage")) {
+          mainApp = mainApp.replace(
+            /override fun getPackages\(\): List<ReactPackage>\s*\{/,
+            `override fun getPackages(): List<ReactPackage> {\n            packages.add(${pkg}.PayliteBridgePackage())`
+          );
+
+          if (!mainApp.includes("PayliteBridgePackage")) {
+            mainApp = mainApp.replace(
+              /val packages = PackageList\(this\)\.packages/,
+              `val packages = PackageList(this).packages\n            packages.add(${pkg}.PayliteBridgePackage())`
+            );
+          }
+
+          if (!mainApp.includes("PayliteBridgePackage")) {
+            mainApp = mainApp.replace(
+              /PackageList\(this\)\.packages/,
+              `PackageList(this).packages.toMutableList().apply { add(${pkg}.PayliteBridgePackage()) }`
+            );
+          }
+
+          fs.writeFileSync(mainAppPath, mainApp, "utf-8");
         }
       }
 
