@@ -3,7 +3,6 @@ import NetInfo from "@react-native-community/netinfo";
 import { ParsedTransaction } from "./types";
 
 const QUEUE_KEY = "paylite_offline_queue";
-const MAX_QUEUE_SIZE = 100;
 
 export interface QueuedTransaction {
   id: string;
@@ -39,7 +38,7 @@ async function loadQueue(): Promise<QueuedTransaction[]> {
 
 async function saveQueue(queue: QueuedTransaction[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(0, MAX_QUEUE_SIZE)));
+    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
     onQueueChange?.(queue.length);
   } catch {}
 }
@@ -86,15 +85,11 @@ export async function flushQueue(): Promise<void> {
         const result = await flushCallback(item.transaction);
         if (!result.success) {
           item.retries++;
-          if (item.retries < 10) {
-            remaining.push(item);
-          }
+          remaining.push(item);
         }
       } catch {
         item.retries++;
-        if (item.retries < 10) {
-          remaining.push(item);
-        }
+        remaining.push(item);
       }
     }
 
@@ -109,7 +104,7 @@ export function startNetworkMonitor(): void {
 
   unsubscribe = NetInfo.addEventListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) {
-      setTimeout(() => flushQueue(), 2000);
+      setTimeout(() => flushQueue(), 500);
     }
   });
 }

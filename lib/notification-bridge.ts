@@ -1,16 +1,17 @@
-import { Platform } from "react-native";
+import { Platform, NativeModules, NativeEventEmitter } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { parseMessage } from "./parser";
 import { isDuplicate, markAsSent } from "./dedupe";
 import { sendTransaction } from "./api-client";
 import { TransactionLog, ParsedTransaction } from "./types";
 import { enqueue, flushQueue, setFlushCallback, startNetworkMonitor } from "./offline-queue";
+import { getToken, getDeviceKey } from "./secure-storage";
 
 type LogCallback = (log: TransactionLog) => void;
 
 let logCallback: LogCallback | null = null;
 let processing = false;
-let nativeListenerActive = false;
+let smsListenerActive = false;
 const queue: Array<{ sender: string; message: string }> = [];
 
 export function setLogCallback(cb: LogCallback): void {
@@ -39,7 +40,12 @@ async function isOnline(): Promise<boolean> {
 async function processNotification(sender: string, message: string): Promise<void> {
   try {
     const parsed = parseMessage(sender, message);
-    if (!parsed) return;
+    if (!parsed) {
+      console.log("[Paylite] SMS not parseable from", sender, ":", message.slice(0, 80));
+      return;
+    }
+
+    console.log("[Paylite] Parsed:", parsed.provider, parsed.trx_id, parsed.amount_paisa);
 
     const duplicate = await isDuplicate(parsed.provider, parsed.trx_id, parsed.amount_paisa);
     if (duplicate) {
@@ -128,11 +134,12 @@ async function processQueue(): Promise<void> {
   }
 }
 
-export async function handleIncomingNotification(
+export async function handleIncomingSms(
   sender: string,
   message: string
 ): Promise<void> {
   if (!sender || !message) return;
+  console.log("[Paylite] SMS from", sender, "len=", message.length);
   queue.push({ sender, message });
   processQueue();
 }
@@ -158,38 +165,91 @@ export function initOfflineQueue(): void {
   flushQueue().catch(() => {});
 }
 
-export function startNativeListener(): void {
-  if (Platform.OS !== "android" || nativeListenerActive) return;
+export async function saveCredentialsToNative(): Promise<void> {
+  if (Platform.OS !== "android") return;
 
   try {
-    const NativeModules = require("react-native").NativeModules;
-    const { NativeEventEmitter } = require("react-native");
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.saveCredentials) return;
 
-    let PayliteBridge: any = null;
-    try {
-      PayliteBridge = NativeModules.PayliteBridge;
-    } catch {}
+    const [deviceKey, token] = await Promise.all([
+      getDeviceKey(),
+      getToken(),
+    ]);
 
-    if (!PayliteBridge) {
-      try {
-        const ExpoModules = require("expo-modules-core");
-        PayliteBridge = ExpoModules.requireNativeModule("PayliteBridge");
-      } catch {}
+    if (deviceKey) {
+      PayliteBridge.saveCredentials(deviceKey, token || "");
+      console.log("[Paylite] Credentials saved to native SharedPreferences");
     }
+  } catch (e: any) {
+    console.warn("[Paylite] Failed to save credentials to native:", e?.message);
+  }
+}
 
-    if (!PayliteBridge) return;
+export async function updateNativeToken(token: string): Promise<void> {
+  if (Platform.OS !== "android") return;
 
-    const emitter = new NativeEventEmitter(PayliteBridge);
-    emitter.addListener("onPaymentNotification", (event: any) => {
-      if (event?.sender && event?.message) {
-        handleIncomingNotification(event.sender, event.message);
-      }
-    });
-
-    nativeListenerActive = true;
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.updateToken) return;
+    PayliteBridge.updateToken(token);
   } catch {}
 }
 
-export function isNativeListenerActive(): boolean {
-  return nativeListenerActive;
+export async function triggerNativeUpload(): Promise<void> {
+  if (Platform.OS !== "android") return;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.triggerUpload) return;
+    PayliteBridge.triggerUpload();
+    console.log("[Paylite] Native upload triggered");
+  } catch {}
+}
+
+export async function getNativeQueueCount(): Promise<number> {
+  if (Platform.OS !== "android") return 0;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+    if (!PayliteBridge?.getNativeQueueCount) return 0;
+    return await PayliteBridge.getNativeQueueCount();
+  } catch {
+    return 0;
+  }
+}
+
+export function startSmsListener(): void {
+  if (Platform.OS !== "android" || smsListenerActive) return;
+
+  try {
+    const PayliteBridge = NativeModules.PayliteBridge;
+
+    if (!PayliteBridge) {
+      console.warn("[Paylite] PayliteBridge native module not found");
+      return;
+    }
+
+    console.log("[Paylite] PayliteBridge module found, setting up SMS listener...");
+
+    const emitter = new NativeEventEmitter(PayliteBridge);
+    emitter.addListener("onPaymentSms", (event: any) => {
+      console.log("[Paylite] SMS event received:", event?.sender);
+      if (event?.sender && event?.message) {
+        handleIncomingSms(event.sender, event.message);
+      }
+    });
+
+    smsListenerActive = true;
+    console.log("[Paylite] SMS listener active - waiting for bKash/NAGAD/Rocket SMS");
+
+    saveCredentialsToNative();
+    triggerNativeUpload();
+  } catch (e: any) {
+    console.error("[Paylite] Failed to start SMS listener:", e?.message);
+  }
+}
+
+export function isSmsListenerActive(): boolean {
+  return smsListenerActive;
 }

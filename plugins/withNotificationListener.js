@@ -2,42 +2,13 @@ const { withAndroidManifest, withDangerousMod } = require("expo/config-plugins")
 const fs = require("fs");
 const path = require("path");
 
-function addNotificationListenerService(config) {
+function addSmsReceiver(config) {
   config = withAndroidManifest(config, (config) => {
     const manifest = config.modResults;
     const app = manifest.manifest.application?.[0];
     if (!app) return config;
 
-    if (!app.service) app.service = [];
     if (!app.receiver) app.receiver = [];
-
-    const hasNLS = app.service.some(
-      (s) =>
-        s.$?.["android:name"] === ".PaymentNotificationListenerService"
-    );
-    if (!hasNLS) {
-      app.service.push({
-        $: {
-          "android:name": ".PaymentNotificationListenerService",
-          "android:label": "Paylite Payment Listener",
-          "android:permission":
-            "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE",
-          "android:exported": "false",
-        },
-        "intent-filter": [
-          {
-            action: [
-              {
-                $: {
-                  "android:name":
-                    "android.service.notification.NotificationListenerService",
-                },
-              },
-            ],
-          },
-        ],
-      });
-    }
 
     const hasSMS = app.receiver.some(
       (r) => r.$?.["android:name"] === ".PaymentSmsReceiver"
@@ -94,9 +65,10 @@ function addNotificationListenerService(config) {
       );
 
       const filesToCopy = [
-        "PaymentNotificationListenerService.kt",
         "PaymentSmsReceiver.kt",
         "PayliteBridgeModule.kt",
+        "PayliteBridgePackage.kt",
+        "SmsUploadWorker.kt",
       ];
 
       for (const fileName of filesToCopy) {
@@ -113,6 +85,47 @@ function addNotificationListenerService(config) {
         }
       }
 
+      const mainAppPath = path.join(javaDir, "MainApplication.kt");
+      if (fs.existsSync(mainAppPath)) {
+        let mainApp = fs.readFileSync(mainAppPath, "utf-8");
+
+        if (!mainApp.includes("PayliteBridgePackage")) {
+          const addLine = `            add(PayliteBridgePackage())`;
+
+          if (mainApp.includes(".packages.apply {")) {
+            mainApp = mainApp.replace(
+              /\.packages\.apply\s*\{/,
+              `.packages.apply {\n${addLine}`
+            );
+          } else if (mainApp.includes("PackageList(this).packages")) {
+            mainApp = mainApp.replace(
+              /PackageList\(this\)\.packages/,
+              `PackageList(this).packages.toMutableList().apply { add(PayliteBridgePackage()) }`
+            );
+          }
+
+          fs.writeFileSync(mainAppPath, mainApp, "utf-8");
+        }
+      }
+
+      const buildGradlePath = path.join(
+        config.modRequest.platformProjectRoot,
+        "app",
+        "build.gradle"
+      );
+
+      if (fs.existsSync(buildGradlePath)) {
+        let buildGradle = fs.readFileSync(buildGradlePath, "utf-8");
+
+        if (!buildGradle.includes("work-runtime")) {
+          buildGradle = buildGradle.replace(
+            /dependencies\s*\{/,
+            `dependencies {\n    implementation "androidx.work:work-runtime-ktx:2.9.0"`
+          );
+          fs.writeFileSync(buildGradlePath, buildGradle, "utf-8");
+        }
+      }
+
       return config;
     },
   ]);
@@ -120,4 +133,4 @@ function addNotificationListenerService(config) {
   return config;
 }
 
-module.exports = addNotificationListenerService;
+module.exports = addSmsReceiver;
